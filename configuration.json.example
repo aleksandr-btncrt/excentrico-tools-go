@@ -1,0 +1,19 @@
+{
+  "google_credentials_path": "credentials.json",
+  "google_sheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
+  "wordpress_config": {
+    "base_url": "https://your-wordpress-site.com",
+    "username": "your-username",
+    "password": "",
+    "application_password": "your-application-password"
+  },
+  "image_config": {
+    "max_width": 1920,
+    "max_height": 1080,
+    "quality": 85
+  },
+  "turso_config": {
+    "database_url": "libsql://your-database-url.turso.io",
+    "auth_token": "your-turso-auth-token"
+  }
+} 
