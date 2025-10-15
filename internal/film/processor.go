@@ -39,7 +39,7 @@ func NewProcessor(
 }
 
 // ProcessSingleFilm processes a single film from the Google Sheet data
-func (p *Processor) ProcessSingleFilm(obj map[string]any, baseDir string, year string, filmName string) error {
+func (p *Processor) ProcessSingleFilm(obj map[string]any, baseDir string, year string, filmName string, templateConfig *services.TemplateData) error {
 	sanitizedName := utils.SanitizeFilename(filmName)
 	filmDir := filepath.Join(baseDir, sanitizedName)
 
@@ -72,7 +72,7 @@ func (p *Processor) ProcessSingleFilm(obj map[string]any, baseDir string, year s
 
 	// Create or update WordPress project
 	log.Printf("Creating/updating WordPress project for '%s'", filmName)
-	if err := wordpress.CreateOrUpdateWordPressProject(p.wordpressService, p.diviTemplateService, p.tursoService, filmDir, obj, year, imageIds); err != nil {
+	if err := wordpress.CreateOrUpdateWordPressProject(p.wordpressService, p.diviTemplateService, p.tursoService, filmDir, obj, year, imageIds, templateConfig); err != nil {
 		return fmt.Errorf("failed to create/update WordPress project: %v", err)
 	}
 

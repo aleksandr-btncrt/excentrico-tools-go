@@ -125,6 +125,38 @@ type DiviFilmTemplate struct {
 	GalleryMediaIds string         `json:"gallery_media_ids"`
 }
 
+type Header struct {
+	TitleTextColor   string `json:"title_text_color"`
+	SubHeadTextColor string `json:"subhead_text_color"`
+}
+
+type Menu struct {
+	MenuId          string `json:"menu_id,omitempty"`
+	ActiveLinkColor string `json:"active_link_color,omitempty"`
+	MenuTextColor   string `json:"menu_text_color,omitempty"`
+	BackgroundColor string `json:"background_color,omitempty"`
+	BackgroundImage string `json:"background_image,omitempty"`
+}
+
+type Section struct {
+	Background                   string `json:"background_color,omitempty"`
+	BackgroundColorGradientStops string `json:"background_color_gradient_stops,omitempty"`
+	BackgroundColorGradientStart string `json:"background_color_gradient_start,omitempty"`
+	BackgroundColorGradientEnd   string `json:"background_color_gradient_end,omitempty"`
+}
+
+type Text struct {
+	Header4TextColor string `json:"header_4_text_color,omitempty"`
+	BoxShadowColor   string `json:"box_shadow_color,omitempty"`
+}
+
+type TemplateData struct {
+	EtPbFullwidthHeader Header  `json:"et_pb_fullwidth_header"`
+	EtPbFullwidthMenu   Menu    `json:"et_pb_fullwidth_menu"`
+	EtPbSection         Section `json:"et_pb_section"`
+	EtPbText            Text    `json:"et_pb_text"`
+}
+
 type Credits struct {
 	Production   string `json:"production,omitempty"`
 	Script       string `json:"script,omitempty"`
@@ -224,23 +256,22 @@ func (s *DiviTemplateService) GenerateDiviTemplateDataWithWordPress(filmData *Fi
 	return template
 }
 
-func (s *DiviTemplateService) GenerateDiviShortcodeTemplate(templateData *DiviFilmTemplate, year string) string {
+func (s *DiviTemplateService) GenerateDiviShortcodeTemplate(templateData *DiviFilmTemplate, year string, templateConfig *TemplateData) string {
 	// Use the factory function to create a standard template composition
-	composer := s.CreateStandardFilmTemplate(templateData, year)
+	composer := s.CreateStandardFilmTemplate(templateData, year, templateConfig)
 	return composer.Compose()
 }
 
-func (s *DiviTemplateService) GenerateCompleteTemplate(filmData *FilmData, imageIds []int, wordpressService *WordPressService, year string) (*DiviFilmTemplate, string) {
-
+func (s *DiviTemplateService) GenerateCompleteTemplate(filmData *FilmData, imageIds []int, wordpressService *WordPressService, year string, templateConfig *TemplateData) (*DiviFilmTemplate, string) {
 	templateData := s.GenerateDiviTemplateDataWithWordPress(filmData, imageIds, wordpressService)
 
-	shortcodes := s.GenerateDiviShortcodeTemplate(templateData, year)
+	shortcodes := s.GenerateDiviShortcodeTemplate(templateData, year, templateConfig)
 
 	return templateData, shortcodes
 }
 
 // Factory function to create a standard film template with all components
-func (s *DiviTemplateService) CreateStandardFilmTemplate(templateData *DiviFilmTemplate, year string) *DiviTemplateComposer {
+func (s *DiviTemplateService) CreateStandardFilmTemplate(templateData *DiviFilmTemplate, year string, templateConfig *TemplateData) *DiviTemplateComposer {
 	// Create subhead with country, year, and duration
 	subhead := fmt.Sprintf("%s · %s · %s", templateData.Country, templateData.Year, templateData.Duration)
 
@@ -260,55 +291,39 @@ func (s *DiviTemplateService) CreateStandardFilmTemplate(templateData *DiviFilmT
 		ContentNotes: templateData.ContentNotes,
 	}
 
+	directorComponent := &DirectorComponent{
+		Directors: templateData.Directors,
+	}
+
+	galleryComponent := &GalleryComponent{
+		MediaIds: templateData.GalleryMediaIds,
+	}
+
 	// Build standard template composition
 	return NewDiviTemplateComposer().
 		AddComponent(&HeaderComponent{
-			Title:           escapeHtml(templateData.Title),
-			Subhead:         subhead,
-			BackgroundImage: templateData.BackgroundImage,
+			Title:            escapeHtml(templateData.Title),
+			Subhead:          subhead,
+			BackgroundImage:  templateData.BackgroundImage,
+			TitleTextColor:   templateConfig.EtPbFullwidthHeader.TitleTextColor,
+			SubheadTextColor: templateConfig.EtPbFullwidthHeader.SubHeadTextColor,
 		}).
-		AddComponent(&MenuComponent{}).
+		AddComponent(&MenuComponent{
+			MenuId:          templateConfig.EtPbFullwidthMenu.MenuId,
+			ActiveLinkColor: templateConfig.EtPbFullwidthMenu.ActiveLinkColor,
+			MenuTextColor:   templateConfig.EtPbFullwidthMenu.MenuTextColor,
+			BackgroundImage: templateConfig.EtPbFullwidthMenu.BackgroundImage,
+			BackgroundColor: templateConfig.EtPbFullwidthMenu.BackgroundColor,
+		}).
 		AddComponent(&MainContentComponent{
 			CreditsComponent:      creditsComponent,
 			ContentNotesComponent: contentNotesComponent,
 			Synopsis:              templateData.Synopsis,
-		}).
-		AddComponent(&DirectorComponent{
-			Directors: templateData.Directors,
-		}).
-		AddComponent(&GalleryComponent{
-			MediaIds: templateData.GalleryMediaIds,
+			DirectorComponent:     directorComponent,
+			GalleryComponent:      galleryComponent,
 		}).
 		AddComponent(&FooterComponent{
 			ButtonText: buttonText,
-		})
-}
-
-// Factory function to create a minimal template (header + content only)
-func (s *DiviTemplateService) CreateMinimalFilmTemplate(templateData *DiviFilmTemplate, year string) *DiviTemplateComposer {
-	// Create subhead with country, year, and duration
-	subhead := fmt.Sprintf("%s · %s · %s", templateData.Country, templateData.Year, templateData.Duration)
-
-	// Create minimal components
-	creditsComponent := &CreditsComponent{
-		Directors: templateData.Directors,
-		Credits:   templateData.Credits,
-	}
-
-	contentNotesComponent := &ContentNotesComponent{
-		ContentNotes: templateData.ContentNotes,
-	}
-
-	return NewDiviTemplateComposer().
-		AddComponent(&HeaderComponent{
-			Title:           escapeHtml(templateData.Title),
-			Subhead:         subhead,
-			BackgroundImage: templateData.BackgroundImage,
-		}).
-		AddComponent(&MainContentComponent{
-			CreditsComponent:      creditsComponent,
-			ContentNotesComponent: contentNotesComponent,
-			Synopsis:              templateData.Synopsis,
 		})
 }
 
@@ -327,8 +342,8 @@ type DiviTemplateFile struct {
 	Thumbnails   []any                    `json:"thumbnails"`
 }
 
-func (s *DiviTemplateService) SaveDiviTemplateToFile(filmData *FilmData, imageIds []int, wordpressService *WordPressService, filmDir string, year string, wordpressPostID int) error {
-	_, shortcodes := s.GenerateCompleteTemplate(filmData, imageIds, wordpressService, year)
+func (s *DiviTemplateService) SaveDiviTemplateToFile(filmData *FilmData, imageIds []int, wordpressService *WordPressService, filmDir string, year string, wordpressPostID int, templateConfig *TemplateData) error {
+	_, shortcodes := s.GenerateCompleteTemplate(filmData, imageIds, wordpressService, year, templateConfig)
 
 	// Use WordPress Post ID instead of film title for better consistency
 	projectID := fmt.Sprintf("%d", wordpressPostID)
@@ -376,7 +391,7 @@ func (s *DiviTemplateService) SaveDiviTemplateToFile(filmData *FilmData, imageId
 		return fmt.Errorf("failed to marshal template file: %v", err)
 	}
 
-	if err := os.WriteFile(templatePath, templateJSON, 0644); err != nil {
+	if err := os.WriteFile(templatePath, templateJSON, 0o644); err != nil {
 		return fmt.Errorf("failed to write template file: %v", err)
 	}
 
@@ -595,7 +610,13 @@ func (c *ContentNotesComponent) Render() string {
 	}
 
 	escapedNdc := escapeHtml(c.ContentNotes)
-	return fmt.Sprintf(`[et_pb_text disabled_on="on|on|on" _builder_version="%s" %s text_font="%s" text_text_color="%s" background_color="%s" custom_margin="%s" custom_padding="%s" %s box_shadow_color="%s" disabled="on" locked="off" %s]<p><strong>NdC: <span data-sheets-root="1">%s</span><br /></strong></p>[/et_pb_text]`,
+	return fmt.Sprintf(`
+	[et_pb_text disabled_on="on|on|on" _builder_version="%s" %s text_font="%s" text_text_color="%s" background_color="%s" custom_margin="%s" custom_padding="%s" %s box_shadow_color="%s" disabled="on" locked="off" %s]
+		<p>
+			<strong>NdC: <span data-sheets-root="1">%s</span><br />
+			</strong>
+		</p>
+	[/et_pb_text]`,
 		BuilderVersion, ModulePresetDefault, FontBold, ColorSecondary, ColorDark, MarginStandard, PaddingNotes, BoxShadowPreset3, ColorSecondary, GlobalColorsInfo,
 		escapedNdc,
 	)
@@ -607,30 +628,44 @@ type GalleryComponent struct {
 }
 
 func (g *GalleryComponent) Render() string {
-	return fmt.Sprintf(`[et_pb_row _builder_version="%s" %s][et_pb_column type="4_4" _builder_version="%s" %s][et_pb_gallery gallery_ids="%s" fullwidth="on" _builder_version="%s" %s %s][/et_pb_gallery][/et_pb_column][/et_pb_row]`,
+	return fmt.Sprintf(`
+	[et_pb_row _builder_version="%s" %s]
+		[et_pb_column type="4_4" _builder_version="%s" %s]
+			[et_pb_gallery gallery_ids="%s" fullwidth="on" _builder_version="%s" %s %s]
+			[/et_pb_gallery]
+		[/et_pb_column]
+	[/et_pb_row]`,
 		BuilderVersion, GlobalColorsInfo, BuilderVersion, GlobalColorsInfo, g.MediaIds, BuilderVersion, ModulePresetDefault, GlobalColorsInfo,
 	)
 }
 
 // Header component
 type HeaderComponent struct {
-	Title           string
-	Subhead         string
-	BackgroundImage string
+	Title            string
+	Subhead          string
+	BackgroundImage  string
+	TitleTextColor   string
+	SubheadTextColor string
 }
 
 func (h *HeaderComponent) Render() string {
-	return fmt.Sprintf(`[et_pb_section fb_built="1" fullwidth="on" _builder_version="%s" %s][et_pb_fullwidth_header title="%s" subhead="%s" _builder_version="%s" title_font="%s" title_text_color="%s" subhead_text_color="%s" %s use_background_color_gradient="on" background_color_gradient_stops="%s 0%%%%|#82d0d9 50%%%%|%s 100%%%%" background_image="%s" background_blend="multiply" width="99.9%%%%" custom_padding="20%%%%||2%%%%||false|false" custom_padding_tablet="" custom_padding_phone="" custom_padding_last_edited="on|desktop" %s][/et_pb_fullwidth_header][/et_pb_section]`,
-		BuilderVersion, GlobalColorsInfo, h.Title, h.Subhead, BuilderVersion, FontBoldCaps, ColorSecondary, ColorSecondary, BackgroundColorOff, ColorPrimary, ColorSecondary, h.BackgroundImage, GlobalColorsInfo,
+	return fmt.Sprintf(`[et_pb_section fb_built="1" fullwidth="on" _builder_version="%s" %s][et_pb_fullwidth_header title="%s" subhead="%s" _builder_version="%s" title_font="%s" title_text_color="%s" subhead_text_color="%s" use_background_color_gradient="on" background_color_gradient_stops="%s 0%%%%|#82d0d9 50%%%%|%s 100%%%%" background_image="%s" background_blend="multiply" width="99.9%%%%" custom_padding="20%%%%||2%%%%||false|false" custom_padding_tablet="" custom_padding_phone="" custom_padding_last_edited="on|desktop" %s][/et_pb_fullwidth_header][/et_pb_section]`,
+		BuilderVersion, GlobalColorsInfo, h.Title, h.Subhead, BuilderVersion, FontBoldCaps, h.TitleTextColor, h.Subhead, ColorPrimary, ColorSecondary, h.BackgroundImage, GlobalColorsInfo,
 	)
 }
 
 // Menu component
-type MenuComponent struct{}
+type MenuComponent struct {
+	MenuId          string
+	ActiveLinkColor string
+	MenuTextColor   string
+	BackgroundColor string
+	BackgroundImage string
+}
 
 func (m *MenuComponent) Render() string {
-	return fmt.Sprintf(`[et_pb_section fb_built="1" fullwidth="on" _builder_version="%s" %s %s][et_pb_fullwidth_menu menu_id="137" active_link_color="%s" dropdown_menu_text_color="#ffcccc" mobile_menu_text_color="#ffcccc" cart_icon_color="#ffcccc" search_icon_color="#ffcccc" menu_icon_color="#ffcccc" _builder_version="%s" %s menu_font="Montserrat|700||on|||||" menu_text_color="%s" menu_font_size="12px" background_color="%s" background_image="%s" background_blend="overlay" text_orientation="right" menu_text_color_tablet="%s" menu_text_color_phone="%s" menu_text_color_last_edited="on|desktop" %s menu_text_color__hover_enabled="on|desktop" menu_text_color__hover="%s"][/et_pb_fullwidth_menu][/et_pb_section]`,
-		BuilderVersion, ModulePresetDefault, GlobalColorsInfo, ColorSecondary, BuilderVersion, ModulePresetDefault, ColorSecondary, ColorPrimary, URLHeaderBackground, ColorSecondary, ColorSecondary, GlobalColorsInfo, ColorLightGreen,
+	return fmt.Sprintf(`[et_pb_section fb_built="1" fullwidth="on" _builder_version="%s" %s %s][et_pb_fullwidth_menu menu_id="%s" active_link_color="%s" dropdown_menu_text_color="#ffcccc" mobile_menu_text_color="#ffcccc" cart_icon_color="#ffcccc" search_icon_color="#ffcccc" menu_icon_color="#ffcccc" _builder_version="%s" menu_font="Montserrat|700||on|||||" menu_text_color="%s" menu_font_size="12px" background_color="%s" background_image="%s" background_blend="overlay" text_orientation="right" menu_text_color_tablet="%s" menu_text_color_phone="%s" menu_text_color_last_edited="on|desktop" %s menu_text_color__hover_enabled="on|desktop" menu_text_color__hover="%s"][/et_pb_fullwidth_menu][/et_pb_section]`,
+		BuilderVersion, ModulePresetDefault, GlobalColorsInfo, m.MenuId, m.ActiveLinkColor, BuilderVersion, m.MenuTextColor, m.BackgroundColor, m.BackgroundImage, ColorSecondary, ColorSecondary, GlobalColorsInfo, ColorLightGreen,
 	)
 }
 
@@ -639,20 +674,48 @@ type MainContentComponent struct {
 	CreditsComponent      *CreditsComponent
 	ContentNotesComponent *ContentNotesComponent
 	Synopsis              string
+	DirectorComponent     *DirectorComponent
+	GalleryComponent      *GalleryComponent
+}
+
+type RowComponent struct {
+	ColumnStruct   string
+	BuilderVersion string
 }
 
 func (m *MainContentComponent) Render() string {
 	escapedSinopsis := escapeHtml(m.Synopsis)
 	creditsSection := m.CreditsComponent.Render()
 	contentNotesSection := m.ContentNotesComponent.Render()
+	directorSection := m.DirectorComponent.Render()
+	galleryComponent := m.GalleryComponent.Render()
 
-	return fmt.Sprintf(`[et_pb_section fb_built="1" _builder_version="%s" use_background_color_gradient="on" background_color_gradient_stops="%s 0%%%%|#82d0d9 77%%%%|%s 100%%%%" background_color_gradient_start="%s" background_color_gradient_end="%s" %s][et_pb_row column_structure="1_2,1_2" _builder_version="%s" %s][et_pb_column type="1_2" _builder_version="%s" %s][et_pb_text _builder_version="%s" text_font_size="15px" header_4_font="%s" header_4_text_color="%s" header_4_font_size="19px" background_color="%s" max_height_tablet="" max_height_phone="" max_height_last_edited="on|desktop" custom_padding="%s" %s box_shadow_color="%s" %s]<h4><strong>FICHA TÉCNICA:</strong></h4>
-%s[/et_pb_text][/et_pb_column][et_pb_column type="1_2" _builder_version="%s" %s][et_pb_text _builder_version="%s" text_font_size="15px" header_4_font="%s" header_4_text_color="%s" header_4_font_size="19px" background_color="%s" custom_padding="%s" %s box_shadow_color="%s" %s]<h4><strong>SINOPSIS:</strong></h4>
-<p class="p1"><span data-sheets-root="1">%s</span></p>[/et_pb_text]%s[/et_pb_column][/et_pb_row][/et_pb_section]`,
+	return fmt.Sprintf(`
+	[et_pb_section fb_built="1" _builder_version="%s" use_background_color_gradient="on" background_color_gradient_stops="%s 0%%%%|#82d0d9 77%%%%|%s 100%%%%" background_color_gradient_start="%s" background_color_gradient_end="%s" %s]
+		[et_pb_row column_structure="1_2,1_2" _builder_version="%s" %s]	
+			[et_pb_column type="1_2" _builder_version="%s" %s]
+				[et_pb_text _builder_version="%s" text_font_size="15px" header_4_font="%s" header_4_text_color="%s" header_4_font_size="19px" background_color="%s" max_height_tablet="" max_height_phone="" max_height_last_edited="on|desktop" custom_padding="%s" %s box_shadow_color="%s" %s]
+					<h4><strong>FICHA TÉCNICA:</strong></h4>
+					%s
+				[/et_pb_text]
+			[/et_pb_column]
+			[et_pb_column type="1_2" _builder_version="%s" %s]
+				[et_pb_text _builder_version="%s" text_font_size="15px" header_4_font="%s" header_4_text_color="%s" header_4_font_size="19px" background_color="%s" custom_padding="%s" %s box_shadow_color="%s" %s]
+					<h4><strong>SINOPSIS:</strong></h4>
+					<p class="p1">
+						<span data-sheets-root="1">%s</span>
+					</p>
+				[/et_pb_text]
+				%s
+			[/et_pb_column]
+		[/et_pb_row]
+		%s
+		%s
+	[/et_pb_section]`,
 		BuilderVersion, ColorPrimary, ColorSecondary, ColorGradientStart, ColorGradientEnd, GlobalColorsInfo, BuilderVersion, GlobalColorsInfo, BuilderVersion, GlobalColorsInfo, BuilderVersion, FontBoldCaps, ColorPrimary, ColorWhite, PaddingStandard, BoxShadowPreset3, ColorSecondary, GlobalColorsInfo,
 		creditsSection,
 		BuilderVersion, GlobalColorsInfo, BuilderVersion, FontBoldCaps, ColorPrimary, ColorWhite, PaddingStandard, BoxShadowPreset3, ColorSecondary, GlobalColorsInfo,
-		escapedSinopsis, contentNotesSection,
+		escapedSinopsis, contentNotesSection, directorSection, galleryComponent,
 	)
 }
 

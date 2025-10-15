@@ -1,0 +1,23 @@
+{
+  "et_pb_fullwidth_header": {
+    "title_text_color":"#E8EAF1",
+    "subhead_text_color":"#E8EAF1"
+  },
+  "et_pb_fullwidth_menu": {
+    "menu_id": "163",
+    "active_link_color": "#6042A8",
+    "menu_text_color": "#E8EAF1",
+    "background_color": "RGBA(255,255,255,0)",
+    "background_image": "https:\/\/excentricofest.com\/wp-content\/uploads\/2025\/07\/Ideas-pixel2.jpg"
+  },
+  "et_pb_section": {
+    "background_color": "#6042A8",
+    "background_color_gradient_stops": "#6042a8 0%|#a598f3 77%|#c6cff5 100%",
+    "background_color_gradient_start": "#3333cc",
+    "background_color_gradient_end": "#6633cc"
+  },
+  "et_pb_text": {
+    "header_4_text_color": "#6042A8",
+    "box_shadow_color": "#C6CFF5"
+  }
+}

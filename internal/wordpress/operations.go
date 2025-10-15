@@ -36,7 +36,14 @@ func UploadMediaToWordPress(wordpressService *services.WordPressService, tursoSe
 	metadata := &models.WordPressMetadata{}
 	err := tursoService.GetWordPressMetadata(filmID, metadata)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load WordPress metadata: %v", err)
+		if strings.Contains(err.Error(), "metadata not found") {
+			log.Printf("No existing WordPress metadata found for '%s', will proceed with media upload", filmTitle)
+			metadata = nil
+		} else {
+			return nil, fmt.Errorf("failed to load WordPress metadata: %v", err)
+		}
+	} else {
+		log.Printf("Loaded existing WordPress metadata for '%s' (Post ID: %d)", filmTitle, metadata.PostID)
 	}
 
 	var webFiles []string
@@ -113,7 +120,12 @@ func UploadMediaToWordPress(wordpressService *services.WordPressService, tursoSe
 			"source_url": media.SourceURL,
 			"alt_text":   media.AltText,
 			"file_path":  webFile,
-			"post_id":    metadata.PostID,
+			"post_id":    0, // Will be updated later when WordPress post is created
+		}
+
+		// If we have existing metadata, use the PostID
+		if metadata != nil {
+			mediaInfo["post_id"] = metadata.PostID
 		}
 
 		uploadedMedia = append(uploadedMedia, mediaInfo)
@@ -149,7 +161,7 @@ func UploadMediaToWordPress(wordpressService *services.WordPressService, tursoSe
 }
 
 // CreateOrUpdateWordPressProject creates or updates a WordPress project
-func CreateOrUpdateWordPressProject(wordpressService *services.WordPressService, diviTemplateService *services.DiviTemplateService, tursoService *services.TursoService, filmDir string, filmData map[string]any, year string, imageIds []int) error {
+func CreateOrUpdateWordPressProject(wordpressService *services.WordPressService, diviTemplateService *services.DiviTemplateService, tursoService *services.TursoService, filmDir string, filmData map[string]any, year string, imageIds []int, templateConfig *services.TemplateData) error {
 	filmTitle := "Untitled Film"
 	if title, exists := filmData["TÍTULO ORIGINAL"]; exists && title != nil {
 		filmTitle = title.(string)
@@ -196,7 +208,7 @@ func CreateOrUpdateWordPressProject(wordpressService *services.WordPressService,
 
 	filmDataStruct := ConvertObjToFilmData(filmData)
 
-	_, _ = diviTemplateService.GenerateCompleteTemplate(filmDataStruct, imageIds, wordpressService, year)
+	_, _ = diviTemplateService.GenerateCompleteTemplate(filmDataStruct, imageIds, wordpressService, year, templateConfig)
 
 	var categoryIDs []int
 	if filmDataStruct.Categoria != "" {
@@ -260,8 +272,46 @@ func CreateOrUpdateWordPressProject(wordpressService *services.WordPressService,
 		return fmt.Errorf("failed to save WordPress metadata: %v", err)
 	}
 
-	if err := diviTemplateService.SaveDiviTemplateToFile(filmDataStruct, imageIds, wordpressService, filmDir, year, metadata.PostID); err != nil {
+	// Update media metadata with the correct PostID if it was 0 initially
+	if err := updateMediaMetadataWithPostID(tursoService, filmID, metadata.PostID); err != nil {
+		log.Printf("Failed to update media metadata with PostID: %v", err)
+		// Don't return error here as this is not critical
+	}
+
+	if err := diviTemplateService.SaveDiviTemplateToFile(filmDataStruct, imageIds, wordpressService, filmDir, year, metadata.PostID, templateConfig ); err != nil {
 		return fmt.Errorf("failed to save Divi template to file: %v", err)
+	}
+
+	return nil
+}
+
+// updateMediaMetadataWithPostID updates media metadata with the correct PostID
+func updateMediaMetadataWithPostID(tursoService *services.TursoService, filmID string, postID int) error {
+	// Get existing media metadata
+	var mediaMetadata []map[string]any
+	err := tursoService.GetMetadata(filmID, "wordpress_media", &mediaMetadata)
+	if err != nil {
+		if strings.Contains(err.Error(), "metadata not found") {
+			// No media metadata to update
+			return nil
+		}
+		return err
+	}
+
+	// Update PostID for any media that has post_id = 0
+	updated := false
+	for _, media := range mediaMetadata {
+		if postIDValue, exists := media["post_id"]; exists {
+			if postIDInt, ok := postIDValue.(int); ok && postIDInt == 0 {
+				media["post_id"] = postID
+				updated = true
+			}
+		}
+	}
+
+	// Save updated metadata if any changes were made
+	if updated {
+		return tursoService.SaveMetadata(filmID, "wordpress_media", mediaMetadata)
 	}
 
 	return nil

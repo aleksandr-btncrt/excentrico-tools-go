@@ -1,0 +1,14 @@
+{
+  "et_pb_fullwidth_header": {
+    "title_text_color":"E6F543",
+    "subhead_text_color":"E6F543"
+  },
+  "et_pb_fullwidth_menu": {
+    "menu_id": "137"
+  },
+  "et_pb_section": {
+    "background_color_gradient_stops": "#6042a8 0%|#a598f3 77%|#c6cff5 100%",
+    "background_color_gradient_start": "#3333cc",
+    "background_color_gradient_end": "#6633cc"
+  }
+}

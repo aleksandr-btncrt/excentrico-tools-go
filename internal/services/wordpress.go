@@ -104,6 +104,12 @@ type WordPressTag struct {
 	Count       int    `json:"count,omitempty"`
 }
 
+type WordPressMenu struct {
+	ID   int    `json:"id,omitempty"`
+	Name string `json:"name,omitempty"`
+	Slug string `json:"slug,omitempty"`
+}
+
 func NewWordPressService(config config.WordPressConfig) *WordPressService {
 
 	authString := fmt.Sprintf("%s:%s", config.Username, config.ApplicationPassword)
@@ -127,7 +133,7 @@ func (s *WordPressService) CreatePost(post *WordPressPost) (*WordPressPost, erro
 		return nil, fmt.Errorf("failed to marshal post: %v", err)
 	}
 
-	resp, err := s.makeRequest("POST", "/wp/v2/posts", jsonData)
+	resp, err := s.makeRequest("POST", "/wp/v2/project", jsonData)
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +154,7 @@ func (s *WordPressService) UpdatePost(postID int, post *WordPressPost) (*WordPre
 		return nil, fmt.Errorf("failed to marshal post: %v", err)
 	}
 
-	resp, err := s.makeRequest("PUT", fmt.Sprintf("/wp/v2/posts/%d", postID), jsonData)
+	resp, err := s.makeRequest("PUT", fmt.Sprintf("/wp/v2/project/%d", postID), jsonData)
 	if err != nil {
 		return nil, err
 	}
@@ -164,7 +170,7 @@ func (s *WordPressService) UpdatePost(postID int, post *WordPressPost) (*WordPre
 }
 
 func (s *WordPressService) GetPost(postID int) (*WordPressPost, error) {
-	resp, err := s.makeRequest("GET", fmt.Sprintf("/wp/v2/posts/%d", postID), nil)
+	resp, err := s.makeRequest("GET", fmt.Sprintf("/wp/v2/project/%d", postID), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -184,7 +190,7 @@ func (s *WordPressService) GetPosts(params map[string]string) ([]*WordPressPost,
 		query.Set(key, value)
 	}
 
-	endpoint := "/wp/v2/posts"
+	endpoint := "/wp/v2/project"
 	if len(query) > 0 {
 		endpoint += "?" + query.Encode()
 	}
@@ -204,7 +210,7 @@ func (s *WordPressService) GetPosts(params map[string]string) ([]*WordPressPost,
 }
 
 func (s *WordPressService) DeletePost(postID int) error {
-	resp, err := s.makeRequest("DELETE", fmt.Sprintf("/wp/v2/posts/%d", postID), nil)
+	resp, err := s.makeRequest("DELETE", fmt.Sprintf("/wp/v2/project/%d", postID), nil)
 	if err != nil {
 		return err
 	}
@@ -469,6 +475,59 @@ func (s *WordPressService) TestConnection() error {
 	}
 
 	return nil
+}
+
+func (s *WordPressService) GetNavMenus() ([]*WordPressMenu, error) {
+
+	// As a last resort, try menu locations and synthesize names
+	type menuLocation struct {
+		Id          int    `json:"id"`
+		Slug        string `json:"slug"`
+		Name        string `json:"name"`
+		Description string `json:"description"`
+	}
+
+	endpoint := "/wp/v2/menus?per_page=20"
+
+	resp, err := s.makeRequest("GET", endpoint, nil)
+	if err != nil {
+		return []*WordPressMenu{}, err
+	}
+	defer resp.Body.Close()
+
+	// Read the response body for debugging
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return []*WordPressMenu{}, err
+	}
+
+	// Try to decode as array of menuLocation first
+	var menuArray []menuLocation
+	if err := json.Unmarshal(bodyBytes, &menuArray); err == nil {
+		var result []*WordPressMenu
+		for _, menu := range menuArray {
+			result = append(result, &WordPressMenu{ID: menu.Id, Name: menu.Name, Slug: menu.Slug})
+		}
+		if len(result) > 0 {
+			return result, nil
+		}
+	}
+
+	// Try to decode as map of locations
+	var locations map[string]menuLocation
+	if err := json.Unmarshal(bodyBytes, &locations); err == nil {
+		var result []*WordPressMenu
+		i := 1
+		for slug, loc := range locations {
+			result = append(result, &WordPressMenu{ID: i, Name: loc.Name, Slug: slug})
+			i++
+		}
+		if len(result) > 0 {
+			return result, nil
+		}
+	}
+
+	return []*WordPressMenu{}, nil
 }
 
 func (s *WordPressService) makeRequest(method, endpoint string, body []byte) (*http.Response, error) {

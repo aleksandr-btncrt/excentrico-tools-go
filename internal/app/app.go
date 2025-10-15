@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -86,8 +87,16 @@ func (a *App) Close() {
 	}
 }
 
+// ListWordPressMenus fetches available WordPress navigation menus
+func (a *App) ListWordPressMenus() ([]*services.WordPressMenu, error) {
+	if a.wordpressService == nil {
+		return nil, fmt.Errorf("wordpress service not initialized")
+	}
+	return a.wordpressService.GetNavMenus()
+}
+
 // ProcessFilms processes films from the Google Sheet with optional year filtering
-func (a *App) ProcessFilms(year string) error {
+func (a *App) ProcessFilms(year string, templateConfig *services.TemplateData) error {
 	if a.config.GoogleSheetID == "" {
 		log.Fatal("Google Sheet ID is not configured. Please add 'google_sheet_id' to your configuration.json file.")
 	}
@@ -173,7 +182,7 @@ func (a *App) ProcessFilms(year string) error {
 	}
 
 	if len(filteredObjects) > 0 {
-		return a.processFilteredObjects(filteredObjects, year)
+		return a.processFilteredObjects(filteredObjects, year, templateConfig)
 	}
 
 	log.Println("Sheet processing completed")
@@ -181,7 +190,7 @@ func (a *App) ProcessFilms(year string) error {
 }
 
 // processFilteredObjects processes the filtered film objects
-func (a *App) processFilteredObjects(filteredObjects []map[string]any, year string) error {
+func (a *App) processFilteredObjects(filteredObjects []map[string]any, year string, templateConfig *services.TemplateData) error {
 	log.Println("================")
 	log.Println("Processing filtered objects...")
 
@@ -205,7 +214,7 @@ func (a *App) processFilteredObjects(filteredObjects []map[string]any, year stri
 
 		log.Printf("Processing film %d/%d: %s", processedCount, len(filteredObjects), filmName)
 
-		if err := a.filmProcessor.ProcessSingleFilm(obj, baseDir, year, filmName); err != nil {
+		if err := a.filmProcessor.ProcessSingleFilm(obj, baseDir, year, filmName, templateConfig); err != nil {
 			log.Printf("❌ Failed to process film '%s': %v", filmName, err)
 			errorCount++
 		} else {
