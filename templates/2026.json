@@ -1,7 +1,8 @@
 {
   "header": {
-    "title_text_color":"#E8EAF1",
-    "subhead_text_color":"#E8EAF1"
+    "title_text_color": "#E8EAF1",
+    "subhead_text_color": "#E8EAF1",
+    "background_enable_color": "off"
   },
   "menu": {
     "menu_id": "163",
@@ -10,13 +11,13 @@
     "background_color": "RGBA(255,255,255,0)",
     "background_image": "https:\/\/excentricofest.com\/wp-content\/uploads\/2025\/07\/Ideas-pixel2.jpg"
   },
-  "et_pb_section": {
+  "contenido": {
     "background_color": "#6042A8",
     "background_color_gradient_stops": "#6042a8 0%|#a598f3 77%|#c6cff5 100%",
     "background_color_gradient_start": "#3333cc",
     "background_color_gradient_end": "#6633cc"
   },
-  "et_pb_text": {
+  "texto": {
     "header_4_text_color": "#6042A8",
     "box_shadow_color": "#C6CFF5"
   },
@@ -26,6 +27,20 @@
       "color": "#6042A8",
       "background_color": "#A7E4F2",
       "box_shadow_color": "#C6CFF5"
+    }
+  },
+  "footer": {
+    "section": {
+      "background_image": "https:\/\/excentricofest.com\/wp-content\/uploads\/2025\/07\/Ideas-pixel2.jpg",
+      "background_position": "top_center",
+      "global_module": "12678"
+    },
+    "button": {
+      "box_shadow_color": "#E8EAF1",
+      "button_icon_color": "#24A68E",
+      "button_border_color": "#A7E4F2",
+      "button_text_color": "#6042A8",
+      "button_bg_color": "#A7E4F2"
     }
   }
 }

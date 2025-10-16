@@ -30,7 +30,6 @@ const (
 
 // Template constants - URLs
 const (
-	URLBaseBackground   = "https://excentricofest.com/wp-content/uploads/2024/05/base-wen.jpg"
 	URLHeaderBackground = "https://excentricofest.com/wp-content/uploads/2024/11/imagen2025.jpg"
 	URLFacebook         = "https://www.facebook.com/excentrico.fest/"
 	URLInstagram        = "https://www.instagram.com/excentrico.fest/?hl=es"
@@ -154,9 +153,24 @@ type Text struct {
 type TemplateData struct {
 	Header      Header  `json:"header"`
 	Menu        Menu    `json:"menu"`
-	EtPbSection Section `json:"et_pb_section"`
-	EtPbText    Text    `json:"et_pb_text"`
+	Contenido   Section `json:"contenido"`
+	Texto    		Text    `json:"texto"`
 	Ndc         Ndc     `json:"ndc"`
+	Footer			Footer  `json:"footer"`
+}
+
+type Footer struct {
+	Section struct {
+		BackgroundImage string `json:"background_image"`
+		BackgroundPosition string `json:"background_position"`
+		GlobalModule string `json:"global_module"`
+	} `json:"section"`
+	Button struct {
+		BoxShadowColor string `json:"box_shadow_color"`
+		ButtonIconColor string `json:"button_icon_color"`
+		ButtonBorderColor string `json:"button_border_color"`
+		ButtonTextColor string `json:"button_text_color"`
+	}
 }
 
 type Credits struct {
@@ -305,7 +319,7 @@ func (s *DiviTemplateService) CreateStandardFilmTemplate(templateData *DiviFilmT
 
 	directorComponent := &DirectorComponent{
 		Directors: templateData.Directors,
-		TextProps: templateConfig.EtPbText,
+		TextProps: templateConfig.Texto,
 	}
 
 	galleryComponent := &GalleryComponent{
@@ -329,11 +343,12 @@ func (s *DiviTemplateService) CreateStandardFilmTemplate(templateData *DiviFilmT
 			Synopsis:              templateData.Synopsis,
 			DirectorComponent:     directorComponent,
 			GalleryComponent:      galleryComponent,
-			SectionProps:          templateConfig.EtPbSection,
-			TextProps:             templateConfig.EtPbText,
+			SectionProps:          templateConfig.Contenido,
+			TextProps:             templateConfig.Texto,
 		}).
 		AddComponent(&FooterComponent{
 			ButtonText: buttonText,
+			FooterProps: templateConfig.Footer,
 		})
 }
 
@@ -735,41 +750,44 @@ func (m *MainContentComponent) Render() string {
 // Footer component
 type FooterComponent struct {
 	ButtonText string
+	FooterProps Footer
 }
 
 func (f *FooterComponent) Render() string {
 	return fmt.Sprintf(`
-	[et_pb_section fb_built="1" admin_label="Section" _builder_version="%s" background_image="%s" background_position="bottom_center" min_height="294.8px" custom_margin="||||false|false" custom_padding="||||false|false" global_module="10465" saved_tabs="all" %s]
+	[et_pb_section fb_built="1" admin_label="Section" _builder_version="%s" background_image="%s" background_position="%s" min_height="294.8px" custom_margin="||||false|false" custom_padding="||||false|false" global_module="%s" saved_tabs="all" %s]
 		[et_pb_row disabled_on="off|off|off" _builder_version="4.23.2" %s min_height="164.4px" %s]
-		[et_pb_column type="4_4" _builder_version="4.17.4" %s %s]
-			[et_pb_button button_url="@ET-DC@eyJkeW5hbWljIjp0cnVlLCJjb250ZW50IjoicG9zdF9saW5rX3VybF9wYWdlIiwic2V0dGluZ3MiOnsicG9zdF9pZCI6IjEwNDI0In19@" button_text="%s" button_alignment="center" disabled_on="on|on|on" module_class="popmake-6500" _builder_version="%s" _dynamic_attributes="button_url" %s %s button_text_color="%s" button_bg_color="%s" button_border_color="%s" button_font="%s" button_icon_color="%s" %s box_shadow_color="%s" disabled="on" %s button_text_color__hover_enabled="on|desktop" button_text_color__hover="%s" button_bg_color__hover_enabled="on|hover" button_bg_color__hover="%s" button_bg_enable_color__hover="on" button_border_color__hover_enabled="on|hover" button_border_color__hover="%s"]
-			[/et_pb_button]
-		[/et_pb_column]
-	[/et_pb_row]
-	[et_pb_row column_structure="1_3,1_3,1_3" _builder_version="%s" %s]\
-		[et_pb_column type="1_3" _builder_version="%s" %s]
-			[et_pb_social_media_follow icon_color="%s" icon_color_tablet="%s" icon_color_phone="%s" icon_color_last_edited="on|tablet" _builder_version="%s" background_color="RGBA(255,255,255,0)" %s button_text_color="%s" button_bg_color="%s" button_border_color="%s" text_orientation="center" custom_margin="||||false|false" %s]
-				[et_pb_social_media_follow_network social_network="facebook" url="%s" icon_color="%s" _builder_version="%s" background_color="%s" %s %s]
-					facebook
-				[/et_pb_social_media_follow_network]
-				[et_pb_social_media_follow_network social_network="instagram" url="%s" icon_color="%s" _builder_version="%s" background_color="%s" %s %s]
-					instagram
-				[/et_pb_social_media_follow_network]
-				[et_pb_social_media_follow_network social_network="twitter" url="%s" icon_color="%s" _builder_version="%s" background_color="%s" %s %s]
-					twitter
-				[/et_pb_social_media_follow_network]
-			[/et_pb_social_media_follow]
-		[/et_pb_column]
-		[et_pb_column type="1_3" _builder_version="%s" %s]
-			[et_pb_text _builder_version="%s" text_text_color="%s" link_font="%s" link_text_color="%s" header_text_color="%s" text_orientation="center" text_text_align="center" %s link_text_color__hover_enabled="on|desktop"]<p><span style="color: %s;"><strong><a href="mailto:%s" target="_blank" rel="noopener noreferrer" style="color: %s;">%s</a></strong></span></p>[/et_pb_text]
-		[/et_pb_column]
-		[et_pb_column type="1_3" _builder_version="%s" %s]
-			[et_pb_search button_color="%s" placeholder_color="%s" _builder_version="%s" form_field_background_color="RGBA(255,255,255,0)" form_field_text_color="%s" form_field_focus_background_color="RGBA(255,255,255,0)" form_field_focus_text_color="%s" button_font="%s" button_text_color="%s" button_font_size="12px" form_field_font_size="12px" background_color="rgba(0,0,0,0)" background_last_edited="on|phone" border_width_all="3px" border_color_all="%s" %s background__hover_enabled="on|desktop"]
-			[/et_pb_search]
-		[/et_pb_column]
-	[/et_pb_row]
+			[et_pb_column type="4_4" _builder_version="4.17.4" %s %s]
+				[et_pb_button button_url="@ET-DC@eyJkeW5hbWljIjp0cnVlLCJjb250ZW50IjoicG9zdF9saW5rX3VybF9wYWdlIiwic2V0dGluZ3MiOnsicG9zdF9pZCI6IjEwNDI0In19@" button_text="%s" button_alignment="center" disabled_on="on|on|on" module_class="popmake-6500" _builder_version="%s" _dynamic_attributes="button_url" %s %s button_text_color="%s" button_bg_color="%s" button_border_color="%s" button_font="%s" button_icon_color="%s" %s box_shadow_color="%s" disabled="on" %s button_text_color__hover_enabled="on|desktop" button_text_color__hover="%s" button_bg_color__hover_enabled="on|hover" button_bg_color__hover="%s" button_bg_enable_color__hover="on" button_border_color__hover_enabled="on|hover" button_border_color__hover="%s"]
+				[/et_pb_button]
+			[/et_pb_column]
+		[/et_pb_row]
+		[et_pb_row column_structure="1_3,1_3,1_3" _builder_version="%s" %s]\
+			[et_pb_column type="1_3" _builder_version="%s" %s]
+				[et_pb_social_media_follow icon_color="%s" icon_color_tablet="%s" icon_color_phone="%s" icon_color_last_edited="on|tablet" _builder_version="%s" background_color="RGBA(255,255,255,0)" %s button_text_color="%s" button_bg_color="%s" button_border_color="%s" text_orientation="center" custom_margin="||||false|false" %s]
+					[et_pb_social_media_follow_network social_network="facebook" url="%s" icon_color="%s" _builder_version="%s" background_color="%s" %s %s]
+						facebook
+					[/et_pb_social_media_follow_network]
+					[et_pb_social_media_follow_network social_network="instagram" url="%s" icon_color="%s" _builder_version="%s" background_color="%s" %s %s]
+						instagram
+					[/et_pb_social_media_follow_network]
+					[et_pb_social_media_follow_network social_network="twitter" url="%s" icon_color="%s" _builder_version="%s" background_color="%s" %s %s]
+						twitter
+					[/et_pb_social_media_follow_network]
+				[/et_pb_social_media_follow]
+			[/et_pb_column]
+			[et_pb_column type="1_3" _builder_version="%s" %s]
+				[et_pb_text _builder_version="%s" text_text_color="%s" link_font="%s" link_text_color="%s" header_text_color="%s" text_orientation="center" text_text_align="center" %s link_text_color__hover_enabled="on|desktop"]
+					<p><span style="color: %s;"><strong><a href="mailto:%s" target="_blank" rel="noopener noreferrer" style="color: %s;">%s</a></strong></span></p>
+				[/et_pb_text]
+			[/et_pb_column]
+			[et_pb_column type="1_3" _builder_version="%s" %s]
+				[et_pb_search button_color="%s" placeholder_color="%s" _builder_version="%s" form_field_background_color="RGBA(255,255,255,0)" form_field_text_color="%s" form_field_focus_background_color="RGBA(255,255,255,0)" form_field_focus_text_color="%s" button_font="%s" button_text_color="%s" button_font_size="12px" form_field_font_size="12px" background_color="rgba(0,0,0,0)" background_last_edited="on|phone" border_width_all="3px" border_color_all="%s" %s background__hover_enabled="on|desktop"]
+				[/et_pb_search]
+			[/et_pb_column]
+		[/et_pb_row]
 	[/et_pb_section]`,
-		BuilderVersion, URLBaseBackground, GlobalColorsInfo, ModulePresetDefault, GlobalColorsInfo, ModulePresetDefault, GlobalColorsInfo, f.ButtonText, BuilderVersion, ModulePresetDefault, CustomButtonOn, ColorPrimary, ColorSecondary, ColorSecondary, FontBold, ColorPrimary, BoxShadowPreset3, ColorLightGreen, GlobalColorsInfo, ColorYellow, ColorCoral, ColorCoral,
+		BuilderVersion, f.FooterProps.Section.BackgroundImage, f.FooterProps.Section.BackgroundPosition, f.FooterProps.Section.GlobalModule, GlobalColorsInfo, ModulePresetDefault, GlobalColorsInfo, ModulePresetDefault, GlobalColorsInfo, f.ButtonText, BuilderVersion, ModulePresetDefault, CustomButtonOn, f.FooterProps.Button.ButtonTextColor, ColorSecondary, f.FooterProps.Button.ButtonBorderColor, FontBold, f.FooterProps.Button.ButtonIconColor, BoxShadowPreset3, f.FooterProps.Button.BoxShadowColor, GlobalColorsInfo, ColorYellow, ColorCoral, ColorCoral,
 		BuilderVersion, GlobalColorsInfo, BuilderVersion, GlobalColorsInfo, ColorPrimary, ColorPink, ColorPink, BuilderVersion, CustomButtonOn, ColorPrimary, ColorSecondary, ColorSecondary, GlobalColorsInfo, URLFacebook, ColorPrimary, BuilderVersion, ColorSecondary, BackgroundColorOn, GlobalColorsInfo, URLInstagram, ColorPrimary, BuilderVersion, ColorSecondary, BackgroundColorOn, GlobalColorsInfo, URLTwitter, ColorPrimary, BuilderVersion, ColorSecondary, BackgroundColorOn, GlobalColorsInfo,
 		BuilderVersion, GlobalColorsInfo, BuilderVersion, ColorYellow, FontBold, ColorDark, ColorDark, GlobalColorsInfo, ColorDark, EmailContact, ColorDark, EmailContact,
 		BuilderVersion, GlobalColorsInfo, ColorPrimary, ColorPrimary, BuilderVersion, ColorDark, ColorDark, FontExtraBold, ColorSecondary, ColorPrimary, GlobalColorsInfo,
