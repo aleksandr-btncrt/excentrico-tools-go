@@ -264,8 +264,6 @@ func CreateOrUpdateWordPressProject(wordpressService *services.WordPressService,
 		metadata.Slug = updatedPost.Slug
 		metadata.Status = updatedPost.Status
 		metadata.UpdatedAt = updatedPost.Modified
-
-		log.Printf("Updated WordPress post ID %d for '%s'", metadata.PostID, filmTitle)
 	}
 
 	if err := tursoService.SaveWordPressMetadata(filmID, metadata); err != nil {

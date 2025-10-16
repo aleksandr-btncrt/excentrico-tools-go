@@ -1,9 +1,9 @@
 {
-  "et_pb_fullwidth_header": {
+  "header": {
     "title_text_color":"#E8EAF1",
     "subhead_text_color":"#E8EAF1"
   },
-  "et_pb_fullwidth_menu": {
+  "menu": {
     "menu_id": "163",
     "active_link_color": "#6042A8",
     "menu_text_color": "#E8EAF1",
@@ -19,5 +19,13 @@
   "et_pb_text": {
     "header_4_text_color": "#6042A8",
     "box_shadow_color": "#C6CFF5"
+  },
+  "ndc": {
+    "text": {
+      "disabled_on": "off|off|off",
+      "color": "#6042A8",
+      "background_color": "#A7E4F2",
+      "box_shadow_color": "#C6CFF5"
+    }
   }
 }
