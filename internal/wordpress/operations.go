@@ -233,6 +233,13 @@ func CreateOrUpdateWordPressProject(wordpressService *services.WordPressService,
 		},
 	}
 
+	// Try to set a featured image from the uploaded media
+	if len(imageIds) > 0 {
+		if featuredID := selectFeaturedMediaID(imageIds, wordpressService); featuredID > 0 {
+			post.FeaturedMedia = featuredID
+		}
+	}
+
 	if metadata == nil {
 		log.Printf("Creating new WordPress project for '%s'", filmTitle)
 
@@ -281,6 +288,48 @@ func CreateOrUpdateWordPressProject(wordpressService *services.WordPressService,
 	}
 
 	return nil
+}
+
+// selectFeaturedMediaID attempts to pick the most suitable featured image ID
+// Preference order by media title/filename/alt text contains: poster, portada, cover
+// Fallbacks to the first available image ID
+func selectFeaturedMediaID(imageIds []int, wordpressService *services.WordPressService) int {
+	if wordpressService == nil || len(imageIds) == 0 {
+		return 0
+	}
+
+	keywords := []string{"poster", "portada", "cover"}
+
+	// First pass: try to match preferred keywords
+	for _, id := range imageIds {
+		media, err := wordpressService.GetMedia(id)
+		if err != nil {
+			continue
+		}
+
+		title := strings.ToLower(media.Title.String())
+		alt := strings.ToLower(media.AltText)
+		filename := ""
+		if media.SourceURL != "" {
+			parts := strings.Split(media.SourceURL, "/")
+			if len(parts) > 0 {
+				filename = parts[len(parts)-1]
+				if dot := strings.LastIndex(filename, "."); dot != -1 {
+					filename = filename[:dot]
+				}
+				filename = strings.ToLower(filename)
+			}
+		}
+
+		for _, kw := range keywords {
+			if strings.Contains(title, kw) || strings.Contains(filename, kw) || strings.Contains(alt, kw) {
+				return id
+			}
+		}
+	}
+
+	// Second pass: just return the first available
+	return imageIds[0]
 }
 
 // updateMediaMetadataWithPostID updates media metadata with the correct PostID

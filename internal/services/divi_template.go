@@ -255,14 +255,12 @@ func (s *DiviTemplateService) GenerateDiviTemplateDataWithWordPress(filmData *Fi
 	}
 	galleryMediaIds := strings.Join(galleryIds, ",")
 
-	// Use first image as background if available
 	var backgroundImage string
-	// TODO: Get actual image URLs from WordPress API using imageIds
-	// For now, using placeholder
-	if len(imageIds) > 0 {
-		backgroundImage = "" // Will be populated when we fetch image URLs
+	// Try to infer a background image from uploaded media
+	if url := s.selectBackgroundImageURL(imageIds, wordpressService); url != "" {
+		backgroundImage = url
 	}
-
+	
 	// Create the complete template data
 	template := &DiviFilmTemplate{
 		Title:           filmData.TituloOriginal,
@@ -279,6 +277,53 @@ func (s *DiviTemplateService) GenerateDiviTemplateDataWithWordPress(filmData *Fi
 	}
 
 	return template
+}
+
+// selectBackgroundImageURL attempts to pick a background image URL from media
+// Preference order by media title/filename/alt text contains: background, header, fondo, bg
+// Falls back to the first media URL if any
+func (s *DiviTemplateService) selectBackgroundImageURL(imageIds []int, wordpressService *WordPressService) string {
+	if wordpressService == nil || len(imageIds) == 0 {
+		return ""
+	}
+
+	keywords := []string{"background", "header", "fondo", "bg"}
+
+	// First pass: try to match keywords
+	for _, id := range imageIds {
+		media, err := wordpressService.GetMedia(id)
+		if err != nil {
+			continue
+		}
+
+		title := strings.ToLower(media.Title.String())
+		alt := strings.ToLower(media.AltText)
+		filename := ""
+		if media.SourceURL != "" {
+			parts := strings.Split(media.SourceURL, "/")
+			if len(parts) > 0 {
+				filename = parts[len(parts)-1]
+				if dot := strings.LastIndex(filename, "."); dot != -1 {
+					filename = filename[:dot]
+				}
+				filename = strings.ToLower(filename)
+			}
+		}
+
+		for _, kw := range keywords {
+			if strings.Contains(title, kw) || strings.Contains(filename, kw) || strings.Contains(alt, kw) {
+				return media.SourceURL
+			}
+		}
+	}
+
+	// Second pass: fallback to first media URL
+	first, err := wordpressService.GetMedia(imageIds[0])
+	if err == nil {
+		return first.SourceURL
+	}
+
+	return ""
 }
 
 func (s *DiviTemplateService) GenerateDiviShortcodeTemplate(templateData *DiviFilmTemplate, year string, templateConfig *TemplateData) string {
