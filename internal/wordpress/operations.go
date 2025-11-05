@@ -215,7 +215,7 @@ func CreateOrUpdateWordPressProject(wordpressService *services.WordPressService,
 		categoryNames := services.ParseCategoryString(filmDataStruct.Categoria)
 		if len(categoryNames) > 0 {
 			var err error
-			categoryIDs, err = wordpressService.GetCategoryIDsByNames(categoryNames)
+			categoryIDs, err = wordpressService.GetCategoryIDsByNames(year, categoryNames)
 			if err != nil {
 				log.Printf("Warning: Failed to get category IDs for film '%s': %v", filmTitle, err)
 			}

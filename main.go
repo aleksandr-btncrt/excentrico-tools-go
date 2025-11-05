@@ -2,17 +2,17 @@ package main
 
 import (
 	"encoding/json"
+	"excentrico-tools-go/internal/app"
+	"excentrico-tools-go/internal/config"
+	"excentrico-tools-go/internal/debug"
+	"excentrico-tools-go/internal/models"
+	"excentrico-tools-go/internal/services"
 	"flag"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
-
-	"excentrico-tools-go/internal/app"
-	"excentrico-tools-go/internal/config"
-	"excentrico-tools-go/internal/debug"
-	"excentrico-tools-go/internal/services"
 )
 
 type RuntimeOptions struct {
@@ -102,6 +102,8 @@ func main() {
 		}
 	}
 
+	var metadata = loadMetadata(runtime.Year)
+
 	if runtime.Template == "" {
 		// Fetch WordPress menus and select one as the template (menu slug)
 		applicationTmp, err := app.New(cfg)
@@ -160,7 +162,7 @@ func main() {
 
 	// No separate nav menu prompt; template now represents the selected WP menu
 
-	application, err := app.New(cfg)
+	application, err := app.New(cfg,)
 	if err != nil {
 		log.Fatalf("Failed to initialize application: %v", err)
 	}
@@ -173,7 +175,7 @@ func main() {
 	log.Printf("Selected template: '%s'", runtime.Template)
 	// Template is the WP menu slug
 
-	if err := application.ProcessFilms(runtime.Year, templateConfig); err != nil {
+	if err := application.ProcessFilms(runtime.Year, templateConfig, metadata); err != nil {
 		log.Fatalf("Failed to process films: %v", err)
 	}
 
@@ -277,4 +279,33 @@ func loadYearTemplateConfig(year string) *services.TemplateData {
 
 	log.Printf("Successfully loaded template configuration from %s", templatePath)
 	return templateConfig
+}
+
+
+func loadMetadata(year string) *models.Metadata {
+	if year == "" {
+		return nil
+	}
+
+	metadataPath := filepath.Join("metadata", year+".json")
+
+	if _, err := os.Stat(metadataPath); os.IsNotExist(err) {
+		log.Printf("Metadata file not found: %s", metadataPath)
+		return nil
+	}
+
+	data, err := os.ReadFile(metadataPath)
+	if err != nil {
+		log.Printf("Failed to read metadata file %s: %v", metadataPath, err)
+		return nil
+	}
+
+	var metadataConfig *models.Metadata
+	if err := json.Unmarshal(data, &metadataConfig); err != nil {
+		log.Printf("Failed to parse template file %s: %v", metadataPath, err)
+		return nil
+	}
+
+	log.Printf("Successfully loaded template configuration from %s", metadataPath)
+	return metadataConfig
 }

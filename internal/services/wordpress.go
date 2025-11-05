@@ -65,7 +65,7 @@ type WordPressPost struct {
 	Status        string                 `json:"status,omitempty"`
 	Type          string                 `json:"type,omitempty"`
 	Author        int                    `json:"author,omitempty"`
-	Categories    []int                  `json:"categories,omitempty"`
+	Categories    []int                  `json:"project_category,omitempty"`
 	Tags          []int                  `json:"tags,omitempty"`
 	FeaturedMedia int                    `json:"featured_media,omitempty"`
 	Slug          string                 `json:"slug,omitempty"`
@@ -94,6 +94,7 @@ type WordPressCategory struct {
 	Slug        string `json:"slug,omitempty"`
 	Description string `json:"description,omitempty"`
 	Count       int    `json:"count,omitempty"`
+	Parent 			int    `json:"parent"`
 }
 
 type WordPressTag struct {
@@ -343,7 +344,7 @@ func (s *WordPressService) UploadMediaFromFile(filePath, title, altText string) 
 }
 
 func (s *WordPressService) GetCategories() ([]*WordPressCategory, error) {
-	resp, err := s.makeRequest("GET", "/wp/v2/categories", nil)
+	resp, err := s.makeRequest("GET", "/wp/v2/project-category", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -357,12 +358,13 @@ func (s *WordPressService) GetCategories() ([]*WordPressCategory, error) {
 	return categories, nil
 }
 
-func (s *WordPressService) SearchCategories(searchText string) ([]*WordPressCategory, error) {
+func (s *WordPressService) SearchCategories(year string) ([]*WordPressCategory, error) {
 
 	query := url.Values{}
-	query.Set("search", searchText)
+	query.Set("search", year)
+	query.Set("per_page", "100")
 
-	endpoint := "/wp/v2/categories?" + query.Encode()
+	endpoint := "/wp/v2/project_category?" + query.Encode()
 
 	resp, err := s.makeRequest("GET", endpoint, nil)
 	if err != nil {
@@ -566,7 +568,7 @@ func (s *WordPressService) makeRequest(method, endpoint string, body []byte) (*h
 	return resp, nil
 }
 
-func (s *WordPressService) GetCategoryIDsByNames(categoryNames []string) ([]int, error) {
+func (s *WordPressService) GetCategoryIDsByNames(year string,categoryNames []string) ([]int, error) {
 	var categoryIDs []int
 
 	for _, categoryName := range categoryNames {
@@ -575,7 +577,7 @@ func (s *WordPressService) GetCategoryIDsByNames(categoryNames []string) ([]int,
 			continue
 		}
 
-		categories, err := s.SearchCategories(strings.TrimSpace(categoryName))
+		categories, err := s.SearchCategories(year)
 		if err != nil {
 			log.Printf("Warning: Failed to search for category '%s': %v", categoryName, err)
 			continue
@@ -583,7 +585,7 @@ func (s *WordPressService) GetCategoryIDsByNames(categoryNames []string) ([]int,
 
 		var foundCategory *WordPressCategory
 		for _, category := range categories {
-			if strings.EqualFold(category.Name, strings.TrimSpace(categoryName)) {
+			if strings.Contains(strings.ToLower(category.Name), strings.ReplaceAll(strings.ToLower(categoryName), "" , "-")) {
 				foundCategory = category
 				break
 			}
@@ -600,6 +602,7 @@ func (s *WordPressService) GetCategoryIDsByNames(categoryNames []string) ([]int,
 
 		if foundCategory != nil {
 			categoryIDs = append(categoryIDs, foundCategory.ID)
+			categoryIDs = append(categoryIDs, foundCategory.Parent)
 			log.Printf("Found category '%s' with ID %d", foundCategory.Name, foundCategory.ID)
 		} else {
 			log.Printf("Warning: Category '%s' not found in WordPress", categoryName)

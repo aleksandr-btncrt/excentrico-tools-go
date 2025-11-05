@@ -5,11 +5,17 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
 	"excentrico-tools-go/internal/config"
 	"excentrico-tools-go/internal/film"
+	"excentrico-tools-go/internal/models"
 	"excentrico-tools-go/internal/services"
+
+	"github.com/goodsign/monday"
 )
 
 // App encapsulates the application dependencies and configuration
@@ -96,7 +102,7 @@ func (a *App) ListWordPressMenus() ([]*services.WordPressMenu, error) {
 }
 
 // ProcessFilms processes films from the Google Sheet with optional year filtering
-func (a *App) ProcessFilms(year string, templateConfig *services.TemplateData) error {
+func (a *App) ProcessFilms(year string, templateConfig *services.TemplateData, metadata *models.Metadata) error {
 	if a.config.GoogleSheetID == "" {
 		log.Fatal("Google Sheet ID is not configured. Please add 'google_sheet_id' to your configuration.json file.")
 	}
@@ -182,7 +188,7 @@ func (a *App) ProcessFilms(year string, templateConfig *services.TemplateData) e
 	}
 
 	if len(filteredObjects) > 0 {
-		return a.processFilteredObjects(filteredObjects, year, templateConfig)
+		return a.processFilteredObjects(filteredObjects, year, templateConfig, metadata)
 	}
 
 	log.Println("Sheet processing completed")
@@ -190,7 +196,7 @@ func (a *App) ProcessFilms(year string, templateConfig *services.TemplateData) e
 }
 
 // processFilteredObjects processes the filtered film objects
-func (a *App) processFilteredObjects(filteredObjects []map[string]any, year string, templateConfig *services.TemplateData) error {
+func (a *App) processFilteredObjects(filteredObjects []map[string]any, year string, templateConfig *services.TemplateData, metadata *models.Metadata) error {
 	log.Println("================")
 	log.Println("Processing filtered objects...")
 
@@ -206,11 +212,22 @@ func (a *App) processFilteredObjects(filteredObjects []map[string]any, year stri
 		processedCount++
 
 		filmName := "unnamed_film"
+		filmSeccion := "unnamed_section"
+		filmDirect := "unammed_directs"
 		if name, exists := obj["TÍTULO ORIGINAL"]; exists && name != nil {
 			filmName = name.(string)
 		} else if name, exists := obj["Name"]; exists && name != nil {
 			filmName = name.(string)
 		}
+		if name, exists := obj["SECCIÓN"]; exists && name != nil {
+			filmSeccion = name.(string)
+		}
+		if name, exists := obj["DIRECCIÓN"]; exists && name != nil {
+			filmDirect = name.(string)
+		}
+
+		
+		SaveMetadata(filmName, CreateMetadata(filmName, filmSeccion, filmDirect, metadata, year))
 
 		log.Printf("Processing film %d/%d: %s", processedCount, len(filteredObjects), filmName)
 
@@ -231,4 +248,33 @@ func (a *App) processFilteredObjects(filteredObjects []map[string]any, year stri
 	log.Println("================")
 
 	return nil
+}
+
+func CreateMetadata(movieName string, seccion string, direccion string , metadata *models.Metadata, year string) string {
+	section :=  strings.ToUpper(seccion);
+	return section + " " + year + " - " + movieName + " - " +  strings.ToUpper(strings.Replace(direccion, "y", "&", -1)) + " - " + "Programación Excéntrico " + year + " " + metadata.Cities[0] + " del " + parseDate(metadata.Dates[0][0]) + " al " + parseDate(metadata.Dates[0][1]);
+}
+
+func parseDate(date string) string {
+	dateParts := strings.Split(date, "-")
+	year, err := strconv.Atoi(dateParts[0])
+	if err != nil {
+		fmt.Println("Could not parse year:", err)
+	}
+	month, err := strconv.Atoi(dateParts[1])
+	if err != nil {
+		fmt.Println("Could not parse month:", err)
+	}
+	day, err := strconv.Atoi(dateParts[2])
+	if err != nil {
+		fmt.Println("Could not parse day:", err)
+	}
+	formatedDay := time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.Local)
+	return monday.Format(formatedDay, "Monday 02 de January", monday.LocaleEsES)
+}
+
+
+func SaveMetadata(movieName string, metadata string)  {
+	path := filepath.Join("films", movieName, "metadata.json")
+	os.WriteFile(path, []byte(metadata), 0644)
 }
