@@ -211,8 +211,8 @@ func CreateOrUpdateWordPressProject(wordpressService *services.WordPressService,
 	_, _ = diviTemplateService.GenerateCompleteTemplate(filmDataStruct, imageIds, wordpressService, year, templateConfig)
 
 	var categoryIDs []int
-	if filmDataStruct.Categoria != "" {
-		categoryNames := services.ParseCategoryString(filmDataStruct.Categoria)
+	if filmDataStruct.Seccion != "" {
+		categoryNames := services.ParseCategoryString(filmDataStruct.Seccion)
 		if len(categoryNames) > 0 {
 			var err error
 			categoryIDs, err = wordpressService.GetCategoryIDsByNames(year, categoryNames)
