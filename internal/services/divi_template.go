@@ -701,26 +701,43 @@ func (c *CreditsComponent) Render() string {
 		creditsHTML.WriteString(fmt.Sprintf(`<p><strong>Dirección:</strong> %s</p>`, escapeHtml(strings.Join(directorNames, ", "))))
 	}
 
-	if c.Credits.Production != "" {
-		creditsHTML.WriteString(fmt.Sprintf(`<p><strong>Producción:</strong> %s</p>`, escapeHtml(c.Credits.Production)))
-	}
-	if c.Credits.Script != "" {
-		creditsHTML.WriteString(fmt.Sprintf(`<p><strong>Guión:</strong> %s</p>`, escapeHtml(c.Credits.Script)))
-	}
-	if c.Credits.Photography != "" {
-		creditsHTML.WriteString(fmt.Sprintf(`<p><strong>Cámara - Foto:</strong> %s</p>`, escapeHtml(c.Credits.Photography)))
-	}
-	if c.Credits.ArtDesign != "" {
-		creditsHTML.WriteString(fmt.Sprintf(`<p><strong>Arte - Diseño:</strong> %s</p>`, escapeHtml(c.Credits.ArtDesign)))
-	}
-	if c.Credits.SoundMusic != "" {
-		creditsHTML.WriteString(fmt.Sprintf(`<p><strong>Sonido - Música:</strong> %s</p>`, escapeHtml(c.Credits.SoundMusic)))
-	}
-	if c.Credits.Editing != "" {
-		creditsHTML.WriteString(fmt.Sprintf(`<p><strong>Edición:</strong> %s</p>`, escapeHtml(c.Credits.Editing)))
-	}
-	if c.Credits.Cast != "" {
-		creditsHTML.WriteString(fmt.Sprintf(`<p><strong>Intérpretes (especificar pronombres para subtítulos):</strong> %s</p>`, escapeHtml(c.Credits.Cast)))
+	// If OtherCredits is present, use it instead of individual credit fields
+	if c.Credits.OtherCredits != "" {
+		// Split by dots and join with <br> tags
+		parts := strings.Split(c.Credits.OtherCredits, ".")
+		var escapedParts []string
+		for _, part := range parts {
+			trimmed := strings.TrimSpace(part)
+			if trimmed != "" {
+				escapedParts = append(escapedParts, escapeHtml(trimmed))
+			}
+		}
+		if len(escapedParts) > 0 {
+			creditsHTML.WriteString(fmt.Sprintf(`<p>%s</p>`, strings.Join(escapedParts, "<br>")))
+		}
+	} else {
+		// Fall back to individual credit fields if OtherCredits is not present
+		if c.Credits.Production != "" {
+			creditsHTML.WriteString(fmt.Sprintf(`<p><strong>Producción:</strong> %s</p>`, escapeHtml(c.Credits.Production)))
+		}
+		if c.Credits.Script != "" {
+			creditsHTML.WriteString(fmt.Sprintf(`<p><strong>Guión:</strong> %s</p>`, escapeHtml(c.Credits.Script)))
+		}
+		if c.Credits.Photography != "" {
+			creditsHTML.WriteString(fmt.Sprintf(`<p><strong>Cámara - Foto:</strong> %s</p>`, escapeHtml(c.Credits.Photography)))
+		}
+		if c.Credits.ArtDesign != "" {
+			creditsHTML.WriteString(fmt.Sprintf(`<p><strong>Arte - Diseño:</strong> %s</p>`, escapeHtml(c.Credits.ArtDesign)))
+		}
+		if c.Credits.SoundMusic != "" {
+			creditsHTML.WriteString(fmt.Sprintf(`<p><strong>Sonido - Música:</strong> %s</p>`, escapeHtml(c.Credits.SoundMusic)))
+		}
+		if c.Credits.Editing != "" {
+			creditsHTML.WriteString(fmt.Sprintf(`<p><strong>Edición:</strong> %s</p>`, escapeHtml(c.Credits.Editing)))
+		}
+		if c.Credits.Cast != "" {
+			creditsHTML.WriteString(fmt.Sprintf(`<p><strong>Intérpretes (especificar pronombres para subtítulos):</strong> %s</p>`, escapeHtml(c.Credits.Cast)))
+		}
 	}
 
 	return creditsHTML.String()
