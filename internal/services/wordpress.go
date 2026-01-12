@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"excentrico-tools-go/internal/config"
 	"excentrico-tools-go/internal/debug"
+	"excentrico-tools-go/internal/logger"
 	"fmt"
 	"io"
 	"log"
@@ -128,45 +129,94 @@ func NewWordPressService(config config.WordPressConfig) *WordPressService {
 	}
 }
 
+// cleanCategories removes any 0 values from the Categories array
+func cleanCategories(categories []int) []int {
+	if categories == nil {
+		return nil
+	}
+	
+	var cleaned []int
+	for _, cat := range categories {
+		if cat != 0 {
+			cleaned = append(cleaned, cat)
+		}
+	}
+	return cleaned
+}
+
 func (s *WordPressService) CreatePost(post *WordPressPost) (*WordPressPost, error) {
+	l := logger.Get()
+	op := l.StartOperation("wordpress_create_post")
+	op.WithContext("post_title", post.Title.String())
+	op.WithContext("post_slug", post.Slug)
+	op.WithContext("post_status", post.Status)
+
+	// Clean the project_category array by removing any 0 values
+	post.Categories = cleanCategories(post.Categories)
+	if len(post.Categories) == 0 {
+		post.Categories = nil // Set to nil if empty to use omitempty
+	}
+
 	jsonData, err := json.Marshal(post)
 	if err != nil {
+		op.Fail("Failed to marshal post", err)
 		return nil, fmt.Errorf("failed to marshal post: %v", err)
 	}
 
 	resp, err := s.makeRequest("POST", "/wp/v2/project", jsonData)
 	if err != nil {
+		op.Fail("WordPress API request failed", err)
 		return nil, err
 	}
 	defer resp.Body.Close()
 
 	var createdPost WordPressPost
 	if err := json.NewDecoder(resp.Body).Decode(&createdPost); err != nil {
+		op.Fail("Failed to decode response", err)
 		return nil, fmt.Errorf("failed to decode response: %v", err)
 	}
 
-	log.Printf("Created WordPress post: %s (ID: %d)", createdPost.Title.String(), createdPost.ID)
+	op.WithWordPress(createdPost.ID, 0, createdPost.Slug)
+	op.WithContext("status_code", resp.StatusCode)
+	op.Complete(fmt.Sprintf("Created WordPress post: %s (ID: %d)", createdPost.Title.String(), createdPost.ID))
 	return &createdPost, nil
 }
 
 func (s *WordPressService) UpdatePost(postID int, post *WordPressPost) (*WordPressPost, error) {
+	l := logger.Get()
+	op := l.StartOperation("wordpress_update_post")
+	op.WithWordPress(postID, 0, post.Slug)
+	op.WithContext("post_title", post.Title.String())
+	op.WithContext("post_status", post.Status)
+
+	// Clean the project_category array by removing any 0 values
+	post.Categories = cleanCategories(post.Categories)
+	if len(post.Categories) == 0 {
+		post.Categories = nil // Set to nil if empty to use omitempty
+	}
+
 	jsonData, err := json.Marshal(post)
 	if err != nil {
+		op.Fail("Failed to marshal post", err)
 		return nil, fmt.Errorf("failed to marshal post: %v", err)
 	}
 
 	resp, err := s.makeRequest("PUT", fmt.Sprintf("/wp/v2/project/%d", postID), jsonData)
 	if err != nil {
+		op.Fail("WordPress API request failed", err)
 		return nil, err
 	}
 	defer resp.Body.Close()
 
 	var updatedPost WordPressPost
 	if err := json.NewDecoder(resp.Body).Decode(&updatedPost); err != nil {
+		op.Fail("Failed to decode response", err)
 		return nil, fmt.Errorf("failed to decode response: %v", err)
 	}
 
-	log.Printf("Updated WordPress post: %s (ID: %d)", updatedPost.Title.String(), updatedPost.ID)
+	op.WithWordPress(updatedPost.ID, 0, updatedPost.Slug)
+	op.WithContext("status_code", resp.StatusCode)
+	op.Complete(fmt.Sprintf("Updated WordPress post: %s (ID: %d)", updatedPost.Title.String(), updatedPost.ID))
 	return &updatedPost, nil
 }
 
@@ -222,8 +272,21 @@ func (s *WordPressService) DeletePost(postID int) error {
 }
 
 func (s *WordPressService) UploadMedia(file *multipart.FileHeader, title, altText string) (*WordPressMedia, error) {
+	// Log HTTP request with multipart payload info
+	l := logger.Get()
+	op := l.StartOperation("wordpress_upload_media")
+	op.WithContext("http_method", "POST")
+	op.WithContext("http_url", s.baseURL+"/wp-json/wp/v2/media")
+	op.WithContext("http_endpoint", "/wp/v2/media")
+	op.WithContext("http_request_payload_type", "multipart/form-data")
+	op.WithContext("http_request_payload_file_name", file.Filename)
+	op.WithContext("http_request_payload_file_size", file.Size)
+	op.WithContext("http_request_payload_title", title)
+	op.WithContext("http_request_payload_alt_text", altText)
+
 	fileReader, err := file.Open()
 	if err != nil {
+		op.Fail("Failed to open file", err)
 		return nil, fmt.Errorf("failed to open file: %v", err)
 	}
 	defer fileReader.Close()
@@ -233,11 +296,13 @@ func (s *WordPressService) UploadMedia(file *multipart.FileHeader, title, altTex
 
 	part, err := writer.CreateFormFile("file", file.Filename)
 	if err != nil {
+		op.Fail("Failed to create form file", err)
 		return nil, fmt.Errorf("failed to create form file: %v", err)
 	}
 
 	_, err = io.Copy(part, fileReader)
 	if err != nil {
+		op.Fail("Failed to copy file data", err)
 		return nil, fmt.Errorf("failed to copy file data: %v", err)
 	}
 
@@ -253,6 +318,7 @@ func (s *WordPressService) UploadMedia(file *multipart.FileHeader, title, altTex
 
 	req, err := http.NewRequest("POST", s.baseURL+"/wp-json/wp/v2/media", &buf)
 	if err != nil {
+		op.Fail("Failed to create HTTP request", err)
 		return nil, fmt.Errorf("failed to create request: %v", err)
 	}
 
@@ -261,47 +327,73 @@ func (s *WordPressService) UploadMedia(file *multipart.FileHeader, title, altTex
 
 	resp, err := s.client.Do(req)
 	if err != nil {
+		op.WithContext("http_status_code", 0)
+		op.Fail("HTTP request failed", err)
 		return nil, fmt.Errorf("failed to make request: %v", err)
 	}
 	defer resp.Body.Close()
 
+	op.WithContext("http_status_code", resp.StatusCode)
+
 	if resp.StatusCode != http.StatusCreated {
 		body, _ := io.ReadAll(resp.Body)
+		op.WithContext("http_response_body", string(body))
+		op.Fail(fmt.Sprintf("Upload failed with status %d", resp.StatusCode), fmt.Errorf("%s", string(body)))
 		return nil, fmt.Errorf("upload failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
 	var media WordPressMedia
 	if err := json.NewDecoder(resp.Body).Decode(&media); err != nil {
+		op.Fail("Failed to decode response", err)
 		return nil, fmt.Errorf("failed to decode response: %v", err)
 	}
 
-	log.Printf("Uploaded media: %s (ID: %d)", media.Title.String(), media.ID)
+	op.WithWordPress(0, media.ID, "")
+	op.WithContext("http_response_media_id", media.ID)
+	op.Complete(fmt.Sprintf("Uploaded media: %s (ID: %d)", media.Title.String(), media.ID))
 	return &media, nil
 }
 
 func (s *WordPressService) UploadMediaFromFile(filePath, title, altText string) (*WordPressMedia, error) {
+	// Log HTTP request with multipart payload info
+	l := logger.Get()
+	op := l.StartOperation("wordpress_upload_media_from_file")
+	op.WithContext("http_method", "POST")
+	op.WithContext("http_url", s.baseURL+"/wp-json/wp/v2/media")
+	op.WithContext("http_endpoint", "/wp/v2/media")
+	op.WithContext("http_request_payload_type", "multipart/form-data")
+	op.WithContext("http_request_payload_file_path", filePath)
+	op.WithContext("http_request_payload_title", title)
+	op.WithContext("http_request_payload_alt_text", altText)
 
 	file, err := os.Open(filePath)
 	if err != nil {
+		op.Fail("Failed to open file", err)
 		return nil, fmt.Errorf("failed to open file: %v", err)
 	}
 	defer file.Close()
 
 	fileInfo, err := file.Stat()
 	if err != nil {
+		op.Fail("Failed to get file info", err)
 		return nil, fmt.Errorf("failed to get file info: %v", err)
 	}
+
+	op.WithContext("http_request_payload_file_name", fileInfo.Name())
+	op.WithContext("http_request_payload_file_size", fileInfo.Size())
 
 	var buf bytes.Buffer
 	writer := multipart.NewWriter(&buf)
 
 	part, err := writer.CreateFormFile("file", fileInfo.Name())
 	if err != nil {
+		op.Fail("Failed to create form file", err)
 		return nil, fmt.Errorf("failed to create form file: %v", err)
 	}
 
 	_, err = io.Copy(part, file)
 	if err != nil {
+		op.Fail("Failed to copy file data", err)
 		return nil, fmt.Errorf("failed to copy file data: %v", err)
 	}
 
@@ -317,6 +409,7 @@ func (s *WordPressService) UploadMediaFromFile(filePath, title, altText string) 
 
 	req, err := http.NewRequest("POST", s.baseURL+"/wp-json/wp/v2/media", &buf)
 	if err != nil {
+		op.Fail("Failed to create HTTP request", err)
 		return nil, fmt.Errorf("failed to create request: %v", err)
 	}
 
@@ -325,21 +418,30 @@ func (s *WordPressService) UploadMediaFromFile(filePath, title, altText string) 
 
 	resp, err := s.client.Do(req)
 	if err != nil {
+		op.WithContext("http_status_code", 0)
+		op.Fail("HTTP request failed", err)
 		return nil, fmt.Errorf("failed to make request: %v", err)
 	}
 	defer resp.Body.Close()
 
+	op.WithContext("http_status_code", resp.StatusCode)
+
 	if resp.StatusCode != http.StatusCreated {
 		body, _ := io.ReadAll(resp.Body)
+		op.WithContext("http_response_body", string(body))
+		op.Fail(fmt.Sprintf("Upload failed with status %d", resp.StatusCode), fmt.Errorf("%s", string(body)))
 		return nil, fmt.Errorf("upload failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
 	var media WordPressMedia
 	if err := json.NewDecoder(resp.Body).Decode(&media); err != nil {
+		op.Fail("Failed to decode response", err)
 		return nil, fmt.Errorf("failed to decode response: %v", err)
 	}
 
-	log.Printf("Uploaded media from file: %s (ID: %d)", media.Title.String(), media.ID)
+	op.WithWordPress(0, media.ID, "")
+	op.WithContext("http_response_media_id", media.ID)
+	op.Complete(fmt.Sprintf("Uploaded media from file: %s (ID: %d)", media.Title.String(), media.ID))
 	return &media, nil
 }
 
@@ -535,6 +637,19 @@ func (s *WordPressService) GetNavMenus() ([]*WordPressMenu, error) {
 func (s *WordPressService) makeRequest(method, endpoint string, body []byte) (*http.Response, error) {
 	url := s.baseURL + "/wp-json" + endpoint
 
+	// Log HTTP request with payload
+	l := logger.Get()
+	op := l.StartOperation("wordpress_http_request")
+	op.WithContext("http_method", method)
+	op.WithContext("http_url", url)
+	op.WithContext("http_endpoint", endpoint)
+	
+	if body != nil {
+		// Log the request payload
+		op.WithContext("http_request_payload", string(body))
+		op.WithContext("http_request_payload_size", len(body))
+	}
+
 	var bodyReader io.Reader
 	if body != nil {
 		bodyReader = bytes.NewReader(body)
@@ -542,6 +657,7 @@ func (s *WordPressService) makeRequest(method, endpoint string, body []byte) (*h
 
 	req, err := http.NewRequest(method, url, bodyReader)
 	if err != nil {
+		op.Fail("Failed to create HTTP request", err)
 		return nil, fmt.Errorf("failed to create request: %v", err)
 	}
 
@@ -555,21 +671,37 @@ func (s *WordPressService) makeRequest(method, endpoint string, body []byte) (*h
 
 	resp, err := s.client.Do(req)
 	if err != nil {
+		op.WithContext("http_status_code", 0)
+		op.Fail("HTTP request failed", err)
 		return nil, fmt.Errorf("failed to make request: %v", err)
 	}
+	
+	// Log response status
+	op.WithContext("http_status_code", resp.StatusCode)
 
 	if resp.StatusCode >= 400 {
 		defer resp.Body.Close()
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		log.Printf("WordPress API Error - Status: %d, URL: %s, Response: %s", resp.StatusCode, req.URL.String(), string(bodyBytes))
+		op.WithContext("http_response_body", string(bodyBytes))
+		op.Fail(fmt.Sprintf("WordPress API Error - Status: %d", resp.StatusCode), fmt.Errorf("%s", string(bodyBytes)))
 		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(bodyBytes))
 	}
+
+	// Complete the operation successfully
+	op.Complete(fmt.Sprintf("HTTP %s request to %s completed", method, endpoint))
 
 	return resp, nil
 }
 
 func (s *WordPressService) GetCategoryIDsByNames(year string,categoryNames []string) ([]int, error) {
+	l := logger.Get()
+	op := l.StartOperation("wordpress_get_category_ids")
+	op.WithContext("year", year)
+	op.WithContext("category_names", categoryNames)
+	
 	var categoryIDs []int
+	foundCount := 0
+	notFoundCount := 0
 
 	for _, categoryName := range categoryNames {
 
@@ -579,7 +711,10 @@ func (s *WordPressService) GetCategoryIDsByNames(year string,categoryNames []str
 
 		categories, err := s.SearchCategories(year)
 		if err != nil {
-			log.Printf("Warning: Failed to search for category '%s': %v", categoryName, err)
+			op.Warn(&logger.WideEvent{
+				Message: fmt.Sprintf("Failed to search for category '%s'", categoryName),
+			})
+			notFoundCount++
 			continue
 		}
 
@@ -603,11 +738,16 @@ func (s *WordPressService) GetCategoryIDsByNames(year string,categoryNames []str
 		if foundCategory != nil {
 			categoryIDs = append(categoryIDs, foundCategory.ID)
 			categoryIDs = append(categoryIDs, foundCategory.Parent)
-			log.Printf("Found category '%s' with ID %d", foundCategory.Name, foundCategory.ID)
+			foundCount++
 		} else {
-			log.Printf("Warning: Category '%s' not found in WordPress", categoryName)
+			notFoundCount++
 		}
 	}
+
+	op.WithContext("found_categories", foundCount)
+	op.WithContext("not_found_categories", notFoundCount)
+	op.WithContext("total_category_ids", len(categoryIDs))
+	op.Complete(fmt.Sprintf("Found %d categories, %d not found", foundCount, notFoundCount))
 
 	return categoryIDs, nil
 }

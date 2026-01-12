@@ -5,6 +5,7 @@ import (
 	"excentrico-tools-go/internal/app"
 	"excentrico-tools-go/internal/config"
 	"excentrico-tools-go/internal/debug"
+	"excentrico-tools-go/internal/logger"
 	"excentrico-tools-go/internal/models"
 	"excentrico-tools-go/internal/services"
 	"flag"
@@ -30,29 +31,54 @@ func main() {
 	navMenuFlag := flag.String("nav-menu", "", "Navigation menu to use (from WordPress)")
 	flag.Parse()
 
+	// Initialize logger
+	logger.Init("excentrico-tools-go")
+	l := logger.Get()
+	if *debugFlag {
+		l.SetSampleRate(1.0) // Log everything in debug mode
+	}
+	
+	// Log file path information
+	if logPath := l.GetLogFilePath(); logPath != "" {
+		fmt.Fprintf(os.Stderr, "Logging to: %s\n", logPath)
+	}
+	
+	// Ensure log file is closed on exit
+	defer func() {
+		if err := logger.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error closing log file: %v\n", err)
+		}
+	}()
+
 	debug.SetEnabled(*debugFlag)
 
 	if *createConfig {
+		op := l.StartOperation("create_config")
 		if err := config.CreateDefaultConfig(); err != nil {
+			op.Fail("Failed to create configuration", err)
 			log.Fatalf("Failed to create configuration: %v", err)
 		}
+		op.Complete("Configuration file created successfully")
 		return
 	}
 
 	cfg, err := config.Load()
 	if err != nil {
-		log.Printf("Configuration error: %v", err)
-		log.Println("")
-		log.Println("To create a default configuration file, run:")
-		log.Println("  ./excentrico-tools-go -create-config")
-		log.Println("")
-		log.Println("Then edit the configuration.json file with your settings.")
+		op := l.StartOperation("load_config")
+		op.WithError(err)
+		op.Fail("Configuration error", err)
+		fmt.Println("")
+		fmt.Println("To create a default configuration file, run:")
+		fmt.Println("  ./excentrico-tools-go -create-config")
+		fmt.Println("")
+		fmt.Println("Then edit the configuration.json file with your settings.")
 		// Even if configuration is missing, allow entering the configuration menu
 	}
 
 	if cfg != nil {
-		log.Printf("Configuration loaded successfully")
-		log.Printf("Google Sheet ID: %s", cfg.GoogleSheetID)
+		op := l.StartOperation("load_config")
+		op.WithContext("google_sheet_id", cfg.GoogleSheetID)
+		op.Complete("Configuration loaded successfully")
 	}
 
 	// Collect runtime options (from flags or interactive prompts)
@@ -78,12 +104,15 @@ func main() {
 	case "process", "process-movies", "2":
 		// proceed to processing flow below
 	default:
-		log.Printf("Unknown menu option '%s'. Valid options: configuration, process", runtime.Menu)
+		op := l.StartOperation("menu_selection")
+		op.WithContext("menu_option", runtime.Menu)
+		op.Fail(fmt.Sprintf("Unknown menu option '%s'", runtime.Menu), fmt.Errorf("valid options: configuration, process"))
 		return
 	}
 
 	if cfg == nil {
-		log.Printf("Configuration is required to process movies. Please run the configuration menu first.")
+		op := l.StartOperation("process_films")
+		op.Fail("Configuration required", fmt.Errorf("configuration is required to process movies"))
 		return
 	}
 
@@ -94,27 +123,39 @@ func main() {
 	// Search for and load year-based template configuration
 	var templateConfig *services.TemplateData
 	if runtime.Year != "" {
-		templateConfig = loadYearTemplateConfig(runtime.Year)
+		templateConfig = loadYearTemplateConfig(runtime.Year, l)
 		if templateConfig != nil {
-			log.Printf("Loaded template configuration for year %s", runtime.Year)
+			op := l.StartOperation("load_template_config")
+			op.WithContext("year", runtime.Year)
+			op.WithContext("template_path", fmt.Sprintf("templates/%s.json", runtime.Year))
+			op.Complete(fmt.Sprintf("Loaded template configuration for year %s", runtime.Year))
 		} else {
-			log.Printf("No template configuration found for year %s", runtime.Year)
+			op := l.StartOperation("load_template_config")
+			op.WithContext("year", runtime.Year)
+			op.Warn(&logger.WideEvent{
+				Message: fmt.Sprintf("No template configuration found for year %s", runtime.Year),
+			})
 		}
 	}
 
-	var metadata = loadMetadata(runtime.Year)
+	var metadata = loadMetadata(runtime.Year, l)
 
 	if runtime.Template == "" {
 		// Fetch WordPress menus and select one as the template (menu slug)
+		op := l.StartOperation("list_wordpress_menus")
 		applicationTmp, err := app.New(cfg)
 		if err != nil {
-			log.Printf("Failed to initialize application for menu listing: %v", err)
+			op.Fail("Failed to initialize application for menu listing", err)
 		} else {
 			defer applicationTmp.Close()
 			var menus []*services.WordPressMenu
 			menus, err = applicationTmp.ListWordPressMenus()
 			if err != nil {
-				log.Printf("Failed to fetch WordPress menus: %v", err)
+				op.Fail("Failed to fetch WordPress menus", err)
+			} else {
+				op.WithContext("menu_count", len(menus))
+				op.WithContext("year_filter", runtime.Year)
+				op.Complete(fmt.Sprintf("Fetched %d WordPress menus", len(menus)))
 			}
 			if len(menus) > 0 {
 				display := menus
@@ -162,24 +203,39 @@ func main() {
 
 	// No separate nav menu prompt; template now represents the selected WP menu
 
-	application, err := app.New(cfg,)
+	op := l.StartOperation("initialize_application")
+	application, err := app.New(cfg)
 	if err != nil {
+		op.Fail("Failed to initialize application", err)
 		log.Fatalf("Failed to initialize application: %v", err)
 	}
+	op.Complete("Application initialized successfully")
 	defer application.Close()
 
 	if strings.TrimSpace(runtime.Template) == "" {
-		log.Printf("No WordPress menu selected. Aborting.")
+		op := l.StartOperation("process_films")
+		op.Fail("No WordPress menu selected", fmt.Errorf("aborting"))
 		return
 	}
-	log.Printf("Selected template: '%s'", runtime.Template)
+	
+	op = l.StartOperation("process_films")
+	op.WithContext("template", runtime.Template)
+	op.WithContext("year", runtime.Year)
+	op.Complete(fmt.Sprintf("Starting film processing with template '%s'", runtime.Template))
 	// Template is the WP menu slug
 
 	if err := application.ProcessFilms(runtime.Year, templateConfig, metadata); err != nil {
+		op := l.StartOperation("process_films")
+		op.WithContext("template", runtime.Template)
+		op.WithContext("year", runtime.Year)
+		op.Fail("Failed to process films", err)
 		log.Fatalf("Failed to process films: %v", err)
 	}
 
-	log.Println("Application completed successfully")
+	op = l.StartOperation("process_films")
+	op.WithContext("template", runtime.Template)
+	op.WithContext("year", runtime.Year)
+	op.Complete("Application completed successfully")
 }
 
 func promptMenuSelection() string {
@@ -249,63 +305,75 @@ func runConfigurationMenu() {
 
 // loadYearTemplateConfig searches for and loads a JSON template configuration file
 // based on the provided year from the templates folder
-func loadYearTemplateConfig(year string) *services.TemplateData {
+func loadYearTemplateConfig(year string, l *logger.Logger) *services.TemplateData {
 	if year == "" {
 		return nil
 	}
 
+	op := l.StartOperation("load_template_config")
+	op.WithContext("year", year)
+	
 	// Construct the template file path
 	templatePath := filepath.Join("templates", year+".json")
+	op.WithContext("template_path", templatePath)
 
 	// Check if the file exists
 	if _, err := os.Stat(templatePath); os.IsNotExist(err) {
-		log.Printf("Template file not found: %s", templatePath)
+		op.Warn(&logger.WideEvent{
+			Message: fmt.Sprintf("Template file not found: %s", templatePath),
+		})
 		return nil
 	}
 
 	// Read the template file
 	data, err := os.ReadFile(templatePath)
 	if err != nil {
-		log.Printf("Failed to read template file %s: %v", templatePath, err)
+		op.Fail(fmt.Sprintf("Failed to read template file %s", templatePath), err)
 		return nil
 	}
 
 	// Parse the JSON
 	var templateConfig *services.TemplateData
 	if err := json.Unmarshal(data, &templateConfig); err != nil {
-		log.Printf("Failed to parse template file %s: %v", templatePath, err)
+		op.Fail(fmt.Sprintf("Failed to parse template file %s", templatePath), err)
 		return nil
 	}
 
-	log.Printf("Successfully loaded template configuration from %s", templatePath)
+	op.Complete(fmt.Sprintf("Successfully loaded template configuration from %s", templatePath))
 	return templateConfig
 }
 
 
-func loadMetadata(year string) *models.Metadata {
+func loadMetadata(year string, l *logger.Logger) *models.Metadata {
 	if year == "" {
 		return nil
 	}
 
+	op := l.StartOperation("load_metadata")
+	op.WithContext("year", year)
+	
 	metadataPath := filepath.Join("metadata", year+".json")
+	op.WithContext("metadata_path", metadataPath)
 
 	if _, err := os.Stat(metadataPath); os.IsNotExist(err) {
-		log.Printf("Metadata file not found: %s", metadataPath)
+		op.Warn(&logger.WideEvent{
+			Message: fmt.Sprintf("Metadata file not found: %s", metadataPath),
+		})
 		return nil
 	}
 
 	data, err := os.ReadFile(metadataPath)
 	if err != nil {
-		log.Printf("Failed to read metadata file %s: %v", metadataPath, err)
+		op.Fail(fmt.Sprintf("Failed to read metadata file %s", metadataPath), err)
 		return nil
 	}
 
 	var metadataConfig *models.Metadata
 	if err := json.Unmarshal(data, &metadataConfig); err != nil {
-		log.Printf("Failed to parse template file %s: %v", metadataPath, err)
+		op.Fail(fmt.Sprintf("Failed to parse metadata file %s", metadataPath), err)
 		return nil
 	}
 
-	log.Printf("Successfully loaded template configuration from %s", metadataPath)
+	op.Complete(fmt.Sprintf("Successfully loaded metadata from %s", metadataPath))
 	return metadataConfig
 }

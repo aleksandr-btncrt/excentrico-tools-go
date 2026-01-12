@@ -3,6 +3,7 @@ package services
 import (
 	"encoding/base64"
 	"encoding/json"
+	"excentrico-tools-go/internal/models"
 	"fmt"
 	"html"
 	"io"
@@ -208,7 +209,7 @@ func parseDirectors(directorString string) []string {
 	return result
 }
 
-func (s *DiviTemplateService) GenerateDiviTemplateDataWithWordPress(filmData *FilmData, imageIds []int, wordpressService *WordPressService) *DiviFilmTemplate {
+func (s *DiviTemplateService) GenerateDiviTemplateDataWithWordPress(filmData *FilmData, imageIds []int, wordpressService *WordPressService, tursoService *TursoService, filmID string) *DiviFilmTemplate {
 	// Parse directors with bio information
 	var directors []DirectorInfo
 	if filmData.Direccion != "" {
@@ -248,9 +249,12 @@ func (s *DiviTemplateService) GenerateDiviTemplateDataWithWordPress(filmData *Fi
 		OtherCredits: filmData.OtrosCreditos,
 	}
 
+	// Filter to only include stills images for the gallery
+	stillsImageIds := s.filterStillsImages(imageIds, tursoService, filmID)
+
 	// Prepare gallery media IDs as comma-separated string
 	var galleryIds []string
-	for _, id := range imageIds {
+	for _, id := range stillsImageIds {
 		galleryIds = append(galleryIds, fmt.Sprintf("%d", id))
 	}
 	galleryMediaIds := strings.Join(galleryIds, ",")
@@ -272,11 +276,96 @@ func (s *DiviTemplateService) GenerateDiviTemplateDataWithWordPress(filmData *Fi
 		Synopsis:        filmData.SinopsisExtendida,
 		ContentNotes:    filmData.NotasContenido,
 		Credits:         credits,
-		ImageGalleryIds: imageIds,
+		ImageGalleryIds: stillsImageIds,
 		GalleryMediaIds: galleryMediaIds,
 	}
 
 	return template
+}
+
+// filterStillsImages filters imageIds to only include images from the Stills folder
+// Uses drive metadata to determine which images are from the Stills folder
+func (s *DiviTemplateService) filterStillsImages(imageIds []int, tursoService *TursoService, filmID string) []int {
+	if tursoService == nil || len(imageIds) == 0 || filmID == "" {
+		return []int{}
+	}
+
+	// Get WordPress media metadata to map image IDs to file paths
+	var wpMediaMetadata []map[string]any
+	err := tursoService.GetMetadata(filmID, "wordpress_media", &wpMediaMetadata)
+	if err != nil {
+		// If no WordPress media metadata, return empty
+		return []int{}
+	}
+
+	// Create a map from WordPress media ID to file path
+	mediaIDToFilePath := make(map[int]string)
+	for _, media := range wpMediaMetadata {
+		if idValue, exists := media["id"]; exists {
+			var mediaID int
+			switch v := idValue.(type) {
+			case int:
+				mediaID = v
+			case float64:
+				mediaID = int(v)
+			default:
+				continue
+			}
+			if filePathValue, exists := media["file_path"]; exists {
+				if filePath, ok := filePathValue.(string); ok {
+					mediaIDToFilePath[mediaID] = filePath
+				}
+			}
+		}
+	}
+
+	// Get drive files metadata
+	var driveFiles []*models.FileWithPath
+	err = tursoService.GetDriveFilesMetadata(filmID, &driveFiles)
+	if err != nil {
+		// If no drive metadata, return empty
+		return []int{}
+	}
+
+	// Create a map from filename (without _web.jpg) to FolderName
+	filenameToFolder := make(map[string]string)
+	for _, file := range driveFiles {
+		// Remove _web.jpg suffix if present, and normalize
+		filename := strings.TrimSuffix(strings.ToLower(file.Name), "_web.jpg")
+		// Also try without any extension
+		if dot := strings.LastIndex(filename, "."); dot != -1 {
+			filenameWithoutExt := filename[:dot]
+			filenameToFolder[filenameWithoutExt] = strings.ToLower(file.FolderName)
+		}
+		filenameToFolder[filename] = strings.ToLower(file.FolderName)
+	}
+
+	// Filter imageIds to only include those from Stills folder
+	var stillsIds []int
+	for _, id := range imageIds {
+		filePath, exists := mediaIDToFilePath[id]
+		if !exists {
+			continue
+		}
+
+		// Extract filename from file path
+		fileName := filepath.Base(filePath)
+		// Remove _web.jpg suffix
+		fileName = strings.TrimSuffix(strings.ToLower(fileName), "_web.jpg")
+		// Remove extension
+		if dot := strings.LastIndex(fileName, "."); dot != -1 {
+			fileName = fileName[:dot]
+		}
+
+		// Check if this file is from Stills folder
+		if folderName, exists := filenameToFolder[fileName]; exists {
+			if folderName == "stills" {
+				stillsIds = append(stillsIds, id)
+			}
+		}
+	}
+
+	return stillsIds
 }
 
 // selectBackgroundImageURL attempts to pick a background image URL from media
@@ -332,8 +421,8 @@ func (s *DiviTemplateService) GenerateDiviShortcodeTemplate(templateData *DiviFi
 	return composer.Compose()
 }
 
-func (s *DiviTemplateService) GenerateCompleteTemplate(filmData *FilmData, imageIds []int, wordpressService *WordPressService, year string, templateConfig *TemplateData) (*DiviFilmTemplate, string) {
-	templateData := s.GenerateDiviTemplateDataWithWordPress(filmData, imageIds, wordpressService)
+func (s *DiviTemplateService) GenerateCompleteTemplate(filmData *FilmData, imageIds []int, wordpressService *WordPressService, tursoService *TursoService, filmID string, year string, templateConfig *TemplateData) (*DiviFilmTemplate, string) {
+	templateData := s.GenerateDiviTemplateDataWithWordPress(filmData, imageIds, wordpressService, tursoService, filmID)
 
 	shortcodes := s.GenerateDiviShortcodeTemplate(templateData, year, templateConfig)
 
@@ -412,8 +501,8 @@ type DiviTemplateFile struct {
 	Thumbnails   []any                    `json:"thumbnails"`
 }
 
-func (s *DiviTemplateService) SaveDiviTemplateToFile(filmData *FilmData, imageIds []int, wordpressService *WordPressService, filmDir string, year string, wordpressPostID int, templateConfig *TemplateData) error {
-	_, shortcodes := s.GenerateCompleteTemplate(filmData, imageIds, wordpressService, year, templateConfig)
+func (s *DiviTemplateService) SaveDiviTemplateToFile(filmData *FilmData, imageIds []int, wordpressService *WordPressService, tursoService *TursoService, filmID string, filmDir string, year string, wordpressPostID int, templateConfig *TemplateData) error {
+	_, shortcodes := s.GenerateCompleteTemplate(filmData, imageIds, wordpressService, tursoService, filmID, year, templateConfig)
 
 	// Use WordPress Post ID instead of film title for better consistency
 	projectID := fmt.Sprintf("%d", wordpressPostID)
