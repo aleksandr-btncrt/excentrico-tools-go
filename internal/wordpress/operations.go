@@ -39,8 +39,51 @@ func CreateWordPressSlug(title string) string {
 	return slug
 }
 
-// UploadMediaToWordPress uploads optimized images to WordPress
-func UploadMediaToWordPress(wordpressService *services.WordPressService, tursoService *services.TursoService, filmDir string, filmTitle string) ([]int, error) {
+// isPathUnderDirectorDir returns true if path contains a path segment named "dir" (case-insensitive).
+func isPathUnderDirectorDir(path string) bool {
+	path = filepath.ToSlash(path)
+	parts := strings.Split(path, "/")
+	for _, p := range parts {
+		if strings.EqualFold(strings.TrimSpace(p), "dir") {
+			return true
+		}
+	}
+	return false
+}
+
+// parseDirectorNames returns director names from film data (Direccion, MultiDir).
+func parseDirectorNames(filmData map[string]any) []string {
+	if filmData == nil {
+		return nil
+	}
+	d, _ := filmData["Direccion"].(string)
+	if d == "" {
+		return nil
+	}
+	multi, _ := filmData["MultiDir"].(string)
+	if strings.ToUpper(strings.TrimSpace(multi)) == "SI" {
+		re := regexp.MustCompile(`\s*,\s*|\s+\+\s+|\s+y\s+|\s*&\s*`)
+		parts := re.Split(d, -1)
+		var names []string
+		for _, p := range parts {
+			p = strings.TrimSpace(p)
+			if p != "" {
+				names = append(names, p)
+			}
+		}
+		return names
+	}
+	return []string{strings.TrimSpace(d)}
+}
+
+// normalizeDirectorCacheKey returns a stable key for director media cache.
+func normalizeDirectorCacheKey(name string) string {
+	return strings.ToLower(strings.TrimSpace(name))
+}
+
+// UploadMediaToWordPress uploads optimized images to WordPress. Director images (under a "Dir" folder)
+// are uploaded with the director name as title and deduplicated via cache and WordPress search.
+func UploadMediaToWordPress(wordpressService *services.WordPressService, tursoService *services.TursoService, filmDir string, filmTitle string, filmData map[string]any) ([]int, error) {
 	l := logger.Get()
 	op := l.StartOperation("upload_wordpress_media")
 	
@@ -63,16 +106,21 @@ func UploadMediaToWordPress(wordpressService *services.WordPressService, tursoSe
 		op.WithContext("existing_metadata", true)
 	}
 
-	var webFiles []string
+	type webFileEntry struct {
+		path       string
+		isDirector bool
+	}
+	var entries []webFileEntry
 	err = filepath.Walk(filmDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-
 		if !info.IsDir() && strings.HasSuffix(strings.ToLower(info.Name()), "_web.jpg") {
-			webFiles = append(webFiles, path)
+			entries = append(entries, webFileEntry{
+				path:       path,
+				isDirector: isPathUnderDirectorDir(path),
+			})
 		}
-
 		return nil
 	})
 
@@ -80,12 +128,19 @@ func UploadMediaToWordPress(wordpressService *services.WordPressService, tursoSe
 		return nil, fmt.Errorf("failed to find _web.jpg files: %v", err)
 	}
 
-	if len(webFiles) == 0 {
+	if len(entries) == 0 {
 		log.Printf("No _web.jpg files found for '%s'", filmTitle)
 		return []int{}, nil
 	}
 
-	log.Printf("Found %d _web.jpg files for '%s'", len(webFiles), filmTitle)
+	log.Printf("Found %d _web.jpg files for '%s'", len(entries), filmTitle)
+
+	directorNames := parseDirectorNames(filmData)
+
+	directorCache := make(map[string]services.DirectorMediaCacheEntry)
+	if getCacheErr := tursoService.GetDirectorMediaCache(&directorCache); getCacheErr != nil && !strings.Contains(getCacheErr.Error(), "metadata not found") {
+		log.Printf("Failed to load director media cache: %v", getCacheErr)
+	}
 
 	existingImageMetadata := make(map[string]int)
 	err = tursoService.GetWPImagesMetadata(filmID, &existingImageMetadata)
@@ -109,18 +164,112 @@ func UploadMediaToWordPress(wordpressService *services.WordPressService, tursoSe
 	uploadedCount := 0
 	skippedCount := 0
 	failedUploads := 0
+	directorImageIndex := 0
 
-	for _, webFile := range webFiles {
+	for _, entry := range entries {
+		webFile := entry.path
 		fileName := filepath.Base(webFile)
 
-		if _, exists := existingImageMetadata[fileName]; exists {
+		// Skip if already uploaded (from DB or in a previous iteration — same base name in another dir)
+		if _, exists := imageMetadataMap[fileName]; exists {
 			skippedCount++
 			continue
 		}
 
+		var media *services.WordPressMedia
+		var mediaID int
+		var sourceURL string
+		titleForMeta := ""
+		altTextForMeta := ""
+
+		if entry.isDirector && len(directorNames) > 0 {
+			directorName := directorNames[directorImageIndex%len(directorNames)]
+			directorImageIndex++
+			cacheKey := normalizeDirectorCacheKey(directorName)
+
+			// 1) Check cache
+			if cached, ok := directorCache[cacheKey]; ok {
+				mediaID = cached.ID
+				sourceURL = cached.SourceURL
+				titleForMeta = directorName
+				altTextForMeta = "Director: " + directorName
+				skippedCount++
+				log.Printf("Using cached director image for '%s' (ID: %d)", directorName, mediaID)
+			} else {
+				// 2) Search WordPress for existing media with this director name
+				searchResults, searchErr := wordpressService.SearchMedia(directorName)
+				if searchErr == nil && len(searchResults) > 0 {
+					// Prefer exact title match
+					for _, m := range searchResults {
+						if strings.EqualFold(strings.TrimSpace(m.Title.String()), strings.TrimSpace(directorName)) {
+							mediaID = m.ID
+							sourceURL = m.SourceURL
+							titleForMeta = m.Title.String()
+							altTextForMeta = m.AltText
+							directorCache[cacheKey] = services.DirectorMediaCacheEntry{ID: m.ID, SourceURL: m.SourceURL}
+							log.Printf("Found existing WordPress media for director '%s' (ID: %d)", directorName, mediaID)
+							break
+						}
+					}
+					if mediaID == 0 && len(searchResults) > 0 {
+						m := searchResults[0]
+						mediaID = m.ID
+						sourceURL = m.SourceURL
+						titleForMeta = m.Title.String()
+						altTextForMeta = m.AltText
+						directorCache[cacheKey] = services.DirectorMediaCacheEntry{ID: m.ID, SourceURL: m.SourceURL}
+						log.Printf("Using first search result for director '%s' (ID: %d)", directorName, mediaID)
+					}
+				}
+				// 3) If not in WP, upload with director name as title
+				if mediaID == 0 {
+					media, err = wordpressService.UploadMediaFromFile(webFile, directorName, "Director: "+directorName)
+					if err != nil {
+						uploadOp := l.StartOperation("upload_single_media")
+						uploadOp.WithFilm(filmID, filmTitle, "", "")
+						uploadOp.Fail(fmt.Sprintf("Failed to upload director media %s", fileName), err)
+						failedUploads++
+						continue
+					}
+					mediaID = media.ID
+					sourceURL = media.SourceURL
+					titleForMeta = media.Title.String()
+					altTextForMeta = media.AltText
+					directorCache[cacheKey] = services.DirectorMediaCacheEntry{ID: media.ID, SourceURL: media.SourceURL}
+					if saveErr := tursoService.SaveDirectorMediaCache(directorCache); saveErr != nil {
+						log.Printf("Failed to save director media cache: %v", saveErr)
+					}
+					uploadedCount++
+					l.StartOperation("upload_single_media").WithFilm(filmID, filmTitle, "", "").WithContext("file_name", fileName).Complete(fmt.Sprintf("Uploaded director image for '%s'", directorName))
+				} else {
+					skippedCount++
+					if saveErr := tursoService.SaveDirectorMediaCache(directorCache); saveErr != nil {
+						log.Printf("Failed to save director media cache: %v", saveErr)
+					}
+				}
+			}
+
+			if mediaID != 0 {
+				imageMetadataMap[fileName] = mediaID
+				mediaInfo := map[string]any{
+					"id":         mediaID,
+					"title":      titleForMeta,
+					"source_url": sourceURL,
+					"alt_text":   altTextForMeta,
+					"file_path":  webFile,
+					"post_id":    0,
+				}
+				if metadata != nil {
+					mediaInfo["post_id"] = metadata.PostID
+				}
+				uploadedMedia = append(uploadedMedia, mediaInfo)
+			}
+			continue
+		}
+
+		// Non-director image: upload with film title prefix
 		title := strings.TrimSuffix(fileName, "_web.jpg")
 		title = fmt.Sprintf("%s - %s", filmTitle, title)
-
 		altText := fmt.Sprintf("Image from %s", filmTitle)
 
 		uploadOp := l.StartOperation("upload_single_media")
@@ -128,7 +277,7 @@ func UploadMediaToWordPress(wordpressService *services.WordPressService, tursoSe
 		uploadOp.WithContext("file_name", fileName)
 		uploadOp.WithContext("file_path", webFile)
 
-		media, err := wordpressService.UploadMediaFromFile(webFile, title, altText)
+		media, err = wordpressService.UploadMediaFromFile(webFile, title, altText)
 		if err != nil {
 			uploadOp.Fail(fmt.Sprintf("Failed to upload media %s", fileName), err)
 			failedUploads++
@@ -145,16 +294,12 @@ func UploadMediaToWordPress(wordpressService *services.WordPressService, tursoSe
 			"source_url": media.SourceURL,
 			"alt_text":   media.AltText,
 			"file_path":  webFile,
-			"post_id":    0, // Will be updated later when WordPress post is created
+			"post_id":    0,
 		}
-
-		// If we have existing metadata, use the PostID
 		if metadata != nil {
 			mediaInfo["post_id"] = metadata.PostID
 		}
-
 		uploadedMedia = append(uploadedMedia, mediaInfo)
-
 		imageMetadataMap[fileName] = media.ID
 		uploadedCount++
 	}
@@ -173,9 +318,9 @@ func UploadMediaToWordPress(wordpressService *services.WordPressService, tursoSe
 		})
 	}
 
-	op.WithCounts(len(webFiles), len(webFiles), 0, skippedCount, uploadedCount, 0)
+	op.WithCounts(len(entries), len(entries), 0, skippedCount, uploadedCount, 0)
 	op.WithContext("failed_uploads", failedUploads)
-	op.Complete(fmt.Sprintf("Media upload completed: %d new uploads, %d skipped, %d total files", uploadedCount, skippedCount, len(webFiles)))
+	op.Complete(fmt.Sprintf("Media upload completed: %d new uploads, %d skipped, %d total files", uploadedCount, skippedCount, len(entries)))
 
 	var imageIds []int
 	for _, mediaID := range imageMetadataMap {

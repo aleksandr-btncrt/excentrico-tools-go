@@ -130,3 +130,20 @@ func (s *TursoService) SaveWPImagesMetadata(filmID string, images interface{}) e
 func (s *TursoService) GetWPImagesMetadata(filmID string, dest interface{}) error {
 	return s.GetMetadata(filmID, "wp_images", dest)
 }
+
+// DirectorMediaCacheKey is the global film_id used to store director image cache (shared across all films).
+const DirectorMediaCacheKey = "__directors__"
+
+// DirectorMediaCacheEntry holds WordPress media id and URL for a director image.
+type DirectorMediaCacheEntry struct {
+	ID        int    `json:"id"`
+	SourceURL string `json:"source_url"`
+}
+
+func (s *TursoService) GetDirectorMediaCache(dest interface{}) error {
+	return s.GetMetadata(DirectorMediaCacheKey, "director_media", dest)
+}
+
+func (s *TursoService) SaveDirectorMediaCache(data interface{}) error {
+	return s.SaveMetadata(DirectorMediaCacheKey, "director_media", data)
+}

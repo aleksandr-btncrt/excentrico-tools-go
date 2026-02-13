@@ -92,7 +92,7 @@ func (p *Processor) ProcessSingleFilm(obj map[string]any, baseDir string, year s
 	wpOp := l.StartOperation("upload_wordpress_media")
 	wpOp.WithFilm(filmID, filmName, year, filmSection)
 	
-	imageIds, err := wordpress.UploadMediaToWordPress(p.wordpressService, p.tursoService, filmDir, filmName)
+	imageIds, err := wordpress.UploadMediaToWordPress(p.wordpressService, p.tursoService, filmDir, filmName, obj)
 	if err != nil {
 		wpOp.Fail("Failed to upload media to WordPress", err)
 		return fmt.Errorf("failed to upload media to WordPress: %v", err)

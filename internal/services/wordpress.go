@@ -61,7 +61,6 @@ func (w WordPressRenderedField) String() string {
 type WordPressPost struct {
 	ID            int                    `json:"id,omitempty"`
 	Title         WordPressRenderedField `json:"title,omitempty"`
-	Content       WordPressRenderedField `json:"content,omitempty"`
 	Excerpt       WordPressRenderedField `json:"excerpt,omitempty"`
 	Status        string                 `json:"status,omitempty"`
 	Type          string                 `json:"type,omitempty"`
@@ -556,6 +555,28 @@ func (s *WordPressService) GetMedia(mediaID int) (*WordPressMedia, error) {
 	}
 
 	return &media, nil
+}
+
+// SearchMedia returns media items matching the search string (searches title and filename).
+func (s *WordPressService) SearchMedia(search string) ([]*WordPressMedia, error) {
+	if search == "" {
+		return nil, nil
+	}
+	query := url.Values{}
+	query.Set("search", search)
+	query.Set("per_page", "20")
+	endpoint := "/wp/v2/media?" + query.Encode()
+	resp, err := s.makeRequest("GET", endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var items []*WordPressMedia
+	if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %v", err)
+	}
+	return items, nil
 }
 
 func (s *WordPressService) TestConnection() error {
