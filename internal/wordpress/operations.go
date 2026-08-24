@@ -51,16 +51,19 @@ func isPathUnderDirectorDir(path string) bool {
 	return false
 }
 
-// parseDirectorNames returns director names from film data (Direccion, MultiDir).
+// parseDirectorNames returns director names from raw film data (sheet columns
+// "DIRECCIÓN" and "Multi Dir"). These must match the raw Google Sheet column
+// names used in ConvertObjToFilmData, since this function operates on the raw
+// map[string]any row rather than the mapped FilmData struct.
 func parseDirectorNames(filmData map[string]any) []string {
 	if filmData == nil {
 		return nil
 	}
-	d, _ := filmData["Direccion"].(string)
+	d, _ := filmData["DIRECCIÓN"].(string)
 	if d == "" {
 		return nil
 	}
-	multi, _ := filmData["MultiDir"].(string)
+	multi, _ := filmData["Multi Dir"].(string)
 	if strings.ToUpper(strings.TrimSpace(multi)) == "SI" {
 		re := regexp.MustCompile(`\s*,\s*|\s+\+\s+|\s+y\s+|\s*&\s*`)
 		parts := re.Split(d, -1)
