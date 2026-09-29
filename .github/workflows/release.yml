@@ -21,10 +21,10 @@ jobs:
         with:
           fetch-depth: 0 # See: https://goreleaser.com/ci/actions/
 
-      - name: Set up Go 1.24
+      - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: 1.24
+          go-version-file: go.mod
         id: go
 
       - name: Run GoReleaser
