@@ -65,6 +65,32 @@ func (s *GoogleDriveService) DownloadFile(fileID, destinationPath string) error 
 	return nil
 }
 
+// GetFileMetadata fetches metadata (id, name, mimeType) for a given file ID.
+func (s *GoogleDriveService) GetFileMetadata(fileID string) (*drive.File, error) {
+	file, err := s.service.Files.Get(fileID).Fields("id, name, mimeType").Do()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get file metadata: %v", err)
+	}
+
+	return file, nil
+}
+
+// DownloadFileBytes downloads the raw content of a file into memory.
+func (s *GoogleDriveService) DownloadFileBytes(fileID string) ([]byte, error) {
+	resp, err := s.service.Files.Get(fileID).Download()
+	if err != nil {
+		return nil, fmt.Errorf("failed to download file: %v", err)
+	}
+	defer resp.Body.Close()
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file content: %v", err)
+	}
+
+	return data, nil
+}
+
 func (s *GoogleDriveService) ListFiles(folderID string) ([]*drive.File, error) {
 	query := fmt.Sprintf("'%s' in parents and trashed=false", folderID)
 

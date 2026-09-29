@@ -35,14 +35,17 @@ type App struct {
 func New(cfg *config.Config) (*App, error) {
 	ctx := context.Background()
 
-	// Initialize Google Sheets service
-	sheetsService, err := services.NewGoogleSheetsService(ctx, cfg.GoogleCredentialsPath)
+	// Initialize Google Drive service
+	driveService, err := services.NewGoogleDriveService(ctx, cfg.GoogleCredentialsPath)
 	if err != nil {
 		return nil, err
 	}
 
-	// Initialize Google Drive service
-	driveService, err := services.NewGoogleDriveService(ctx, cfg.GoogleCredentialsPath)
+	// Initialize Google Sheets service. The Drive service is passed in so
+	// ReadRange can fall back to downloading and parsing the file locally
+	// when the configured Google Sheet ID actually points to a .xlsx file
+	// (the Sheets API cannot read values from those - see issue #1).
+	sheetsService, err := services.NewGoogleSheetsService(ctx, cfg.GoogleCredentialsPath, driveService)
 	if err != nil {
 		return nil, err
 	}
