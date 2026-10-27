@@ -17,7 +17,9 @@ func buildTestXLSX(t *testing.T, sheetName string, rows [][]string) []byte {
 		if _, err := f.NewSheet(sheetName); err != nil {
 			t.Fatalf("failed to create sheet: %v", err)
 		}
-		f.DeleteSheet("Sheet1")
+		if err := f.DeleteSheet("Sheet1"); err != nil {
+			t.Fatalf("failed to delete default sheet: %v", err)
+		}
 	}
 
 	for rowIdx, row := range rows {

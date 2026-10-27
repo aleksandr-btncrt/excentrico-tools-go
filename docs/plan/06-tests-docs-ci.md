@@ -51,3 +51,10 @@ logger.
    `metadata.json`, logs, Turso metadata types (`wordpress`, `drive_files`,
    `wp_images`, `wordpress_media`, `director_media`).
 9. **Development** — tests, lint, release, project layout, troubleshooting.
+
+## Status
+
+Done in Step 8: pure-function tests added (`utils`, `drive.isAllowedFolder`,
+`CreateWordPressSlug`, `parseDuration`, `filterStillsImages`); lint is clean
+and blocking; CI runs `go test -race -cover`; `.goreleaser.yaml` validated
+with a snapshot build; README rewritten (flag list checked against `-h`).

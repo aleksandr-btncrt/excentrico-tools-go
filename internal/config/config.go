@@ -158,7 +158,8 @@ func CreateDefaultConfig() error {
 		return fmt.Errorf("failed to marshal default config: %v", err)
 	}
 
-	err = os.WriteFile("configuration.json", configData, 0644)
+	// 0600: the file holds the WordPress password and the Turso auth token.
+	err = os.WriteFile("configuration.json", configData, 0600)
 	if err != nil {
 		return fmt.Errorf("failed to write configuration file: %v", err)
 	}

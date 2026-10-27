@@ -57,7 +57,7 @@ Ground rule for every step: `go build ./... && go vet ./... && go test ./...` mu
 - [x] 4.3 Remove the `op.Fail` + `log.Fatalf` duplicates and repeated `process_films` trackers in `main.go`; introduce `func run() error` with a single exit path.
 - [x] 4.4 Flags: `-non-interactive`, `-film "<title>"`, `-dry-run`, `-check` (wires existing `TestConnection` + Turso ping + sheet header read), `-template <path>` (from 1.3).
 - [x] 4.5 Replace stray `log.Printf`/`fmt.Printf` in services with tracker events.
-- [~] 4.6 Verify: run with `-non-interactive -year 2026 -dry-run`; terminal shows only progress lines; log file contains one `process_single_film` per film. (Partially verified: live run prints only progress lines, stdout empty, events only in the log file; the sheet read returns 403 for the configured service account — same on `main` — so per-film lines were verified by unit test only. Re-run once sheet access is granted.)
+- [~] 4.6 Verify: run with `-non-interactive -year 2026 -dry-run`; terminal shows only progress lines; log file contains one `process_single_film` per film. (Partially verified: live run prints only progress lines, stdout empty, events only in the log file; per-film lines and the single `process_single_film` event per film are verified by unit tests only. A live run is not possible: the configured Google Sheet no longer exists (the 403 seen on this branch and on `main`). Re-run against the next edition's sheet once `google_sheet_id` points to it.)
 
 ### Step 5 — Structure: schema package and interfaces (PR: "refactor: sheet package and consumer interfaces")
 
@@ -76,7 +76,7 @@ Ground rule for every step: `go build ./... && go vet ./... && go test ./...` mu
 - [x] 6.4 `mediaFilenameStem()` helper replacing the three copies of URL→filename logic.
 - [~] 6.5 `-embed-images` flag (default off → `encoded: ""`). Validate against one real Divi import before changing the default; note the result in `docs/plan/03-performance.md`. (Partially done: flag and `EmbedImages` implemented and tested; default kept **on** because the Divi import has not been validated — see `docs/plan/03-performance.md` 3.4.)
 - [x] 6.6 `httptest` test for `FetchMedia` chunking/pagination.
-- [~] 6.7 Verify: count `/wp/v2/media` requests in a run log — ≤ 5 per film. (Verified offline: `TestCreateOrUpdate_MediaRequestBudget` — 3 directors / 20 images → 1 media request. Live run-log count pending: sheet read returns 403 for the configured service account, same on `main`.)
+- [~] 6.7 Verify: count `/wp/v2/media` requests in a run log — ≤ 5 per film. (Verified offline: `TestCreateOrUpdate_MediaRequestBudget` — 3 directors / 20 images → 1 media request. Live run-log count not possible: the configured Google Sheet no longer exists. Re-check on the first run against a new sheet.)
 
 ### Step 7 — Structure: split and template-ise Divi rendering (PR: "refactor: split divi_template.go, text/template rendering")
 
@@ -88,10 +88,10 @@ Ground rule for every step: `go build ./... && go vet ./... && go test ./...` mu
 
 ### Step 8 — Tests, CI, docs (PR: "docs: README rewrite; ci: lint blocking, goreleaser")
 
-- [ ] 8.1 Remaining pure-function tests: `CreateWordPressSlug`, `parseDuration`, `ExtractFileIDFromURL`, `SanitizeFilename`, `isAllowedFolder`, `filterStillsImages`.
-- [ ] 8.2 Flip lint job to blocking; add `go test -race -cover ./...`.
-- [ ] 8.3 Add `.goreleaser.yaml` (linux/darwin/windows × amd64/arm64; archive `LICENSE`, `README.md`, `configuration.json.example`, `templates/**`, `metadata/**`; `-X main.version`), and set `logger.version` from it.
-- [ ] 8.4 Rewrite `README.md` per the nine-section outline in `06-tests-docs-ci.md`; remove the non-existent API examples and `examples/` references; document sheet/Drive folder conventions, template schema, all flags, Turso metadata types.
+- [x] 8.1 Remaining pure-function tests: `CreateWordPressSlug`, `parseDuration`, `ExtractFileIDFromURL`, `SanitizeFilename`, `isAllowedFolder`, `filterStillsImages`.
+- [x] 8.2 Flip lint job to blocking; add `go test -race -cover ./...`. (Baseline findings fixed: gofmt, errcheck, S1011; `configuration.json` now written 0600; G301/G302/G306 for films/logs output and G101 false positives excluded with reasons in `.golangci.yml`.)
+- [x] 8.3 Add `.goreleaser.yaml` (linux/darwin/windows × amd64/arm64; archive `LICENSE`, `README.md`, `configuration.json.example`, `templates/**`, `metadata/**`; `-X main.version`), and set `logger.version` from it. (Also `-version`; validated with `goreleaser check` and a local snapshot build of all six targets.)
+- [x] 8.4 Rewrite `README.md` per the nine-section outline in `06-tests-docs-ci.md`; remove the non-existent API examples and `examples/` references; document sheet/Drive folder conventions, template schema, all flags, Turso metadata types.
 
 ---
 

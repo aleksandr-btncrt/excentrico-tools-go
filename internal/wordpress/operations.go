@@ -78,7 +78,7 @@ func UploadMediaToWordPress(ctx context.Context, wordpressService Client, tursoS
 	filmTitle := film.Title()
 	l := logger.Get()
 	op := l.StartOperation("upload_wordpress_media")
-	
+
 	filmID := utils.SanitizeFilename(filmTitle)
 	op.WithFilm(filmID, filmTitle, "", "")
 	op.WithContext("film_dir", filmDir)

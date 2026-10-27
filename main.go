@@ -26,6 +26,11 @@ import (
 // stdin is shared by all prompts so buffered input is not lost between them.
 var stdin = bufio.NewScanner(os.Stdin)
 
+// version is set at release time with -ldflags "-X main.version=<tag>"
+// (see .goreleaser.yaml); it is printed by -version and stamped on every
+// log event.
+var version = "dev"
+
 type RuntimeOptions struct {
 	Menu         string
 	Year         string
@@ -64,10 +69,17 @@ func run() error {
 	// import without embedded images has been checked; see
 	// docs/plan/03-performance.md.
 	embedImagesFlag := flag.Bool("embed-images", true, "Embed images as base64 in divi_template.json (use -embed-images=false for URL-only, much smaller files)")
+	versionFlag := flag.Bool("version", false, "Print the version and exit")
 	flag.Parse()
+
+	if *versionFlag {
+		fmt.Println("excentrico-tools-go", version)
+		return nil
+	}
 
 	logger.Init("excentrico-tools-go")
 	l := logger.Get()
+	l.SetVersion(version)
 	defer func() {
 		if err := logger.Close(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error closing log file: %v\n", err)
@@ -412,7 +424,6 @@ func loadTemplateConfig(explicitPath, year string, l *logger.Logger) (services.T
 	return templateConfig, nil
 }
 
-
 func loadMetadata(year string, l *logger.Logger) *models.Metadata {
 	if year == "" {
 		return nil
@@ -420,7 +431,7 @@ func loadMetadata(year string, l *logger.Logger) *models.Metadata {
 
 	op := l.StartOperation("load_metadata")
 	op.WithContext("year", year)
-	
+
 	metadataPath := filepath.Join("metadata", year+".json")
 	op.WithContext("metadata_path", metadataPath)
 

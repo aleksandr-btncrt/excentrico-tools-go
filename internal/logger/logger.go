@@ -13,57 +13,57 @@ import (
 // WideEvent represents a comprehensive log event with all context
 type WideEvent struct {
 	// Core fields
-	Timestamp  string                 `json:"timestamp"`
-	Level      string                 `json:"level"` // info, warn, error, debug
-	Message    string                 `json:"message"`
-	Service    string                 `json:"service,omitempty"`
-	Version    string                 `json:"version,omitempty"`
-	RequestID  string                 `json:"request_id,omitempty"`
-	Operation  string                 `json:"operation,omitempty"` // e.g., "process_film", "upload_media", "download_drive"
-	
+	Timestamp string `json:"timestamp"`
+	Level     string `json:"level"` // info, warn, error, debug
+	Message   string `json:"message"`
+	Service   string `json:"service,omitempty"`
+	Version   string `json:"version,omitempty"`
+	RequestID string `json:"request_id,omitempty"`
+	Operation string `json:"operation,omitempty"` // e.g., "process_film", "upload_media", "download_drive"
+
 	// Performance
-	DurationMs int64                  `json:"duration_ms,omitempty"`
-	
+	DurationMs int64 `json:"duration_ms,omitempty"`
+
 	// Outcome
-	Outcome    string                 `json:"outcome,omitempty"` // success, error, partial
-	StatusCode int                    `json:"status_code,omitempty"`
-	
+	Outcome    string `json:"outcome,omitempty"` // success, error, partial
+	StatusCode int    `json:"status_code,omitempty"`
+
 	// Film context (high cardinality)
-	FilmID     string                 `json:"film_id,omitempty"`
-	FilmName   string                 `json:"film_name,omitempty"`
-	FilmYear   string                 `json:"film_year,omitempty"`
-	FilmSection string                `json:"film_section,omitempty"`
-	
+	FilmID      string `json:"film_id,omitempty"`
+	FilmName    string `json:"film_name,omitempty"`
+	FilmYear    string `json:"film_year,omitempty"`
+	FilmSection string `json:"film_section,omitempty"`
+
 	// WordPress context
-	WordPressPostID int               `json:"wordpress_post_id,omitempty"`
-	WordPressMediaID int              `json:"wordpress_media_id,omitempty"`
-	WordPressSlug   string            `json:"wordpress_slug,omitempty"`
-	
+	WordPressPostID  int    `json:"wordpress_post_id,omitempty"`
+	WordPressMediaID int    `json:"wordpress_media_id,omitempty"`
+	WordPressSlug    string `json:"wordpress_slug,omitempty"`
+
 	// Drive context
-	DriveFolderID   string            `json:"drive_folder_id,omitempty"`
-	DriveFileID     string            `json:"drive_file_id,omitempty"`
-	DriveFileName   string            `json:"drive_file_name,omitempty"`
-	
+	DriveFolderID string `json:"drive_folder_id,omitempty"`
+	DriveFileID   string `json:"drive_file_id,omitempty"`
+	DriveFileName string `json:"drive_file_name,omitempty"`
+
 	// Image processing context
-	ImageOriginalPath string           `json:"image_original_path,omitempty"`
-	ImageOptimizedPath string          `json:"image_optimized_path,omitempty"`
-	ImageOriginalSize int64            `json:"image_original_size,omitempty"`
-	ImageOptimizedSize int64           `json:"image_optimized_size,omitempty"`
-	ImageReductionPercent float64      `json:"image_reduction_percent,omitempty"`
-	
+	ImageOriginalPath     string  `json:"image_original_path,omitempty"`
+	ImageOptimizedPath    string  `json:"image_optimized_path,omitempty"`
+	ImageOriginalSize     int64   `json:"image_original_size,omitempty"`
+	ImageOptimizedSize    int64   `json:"image_optimized_size,omitempty"`
+	ImageReductionPercent float64 `json:"image_reduction_percent,omitempty"`
+
 	// Counts and metrics
-	TotalFiles      int                `json:"total_files,omitempty"`
-	ImageFiles      int                `json:"image_files,omitempty"`
-	FilesDownloaded int                `json:"files_downloaded,omitempty"`
-	FilesSkipped    int                `json:"files_skipped,omitempty"`
-	FilesUploaded   int                `json:"files_uploaded,omitempty"`
-	ImagesProcessed int                `json:"images_processed,omitempty"`
-	
+	TotalFiles      int `json:"total_files,omitempty"`
+	ImageFiles      int `json:"image_files,omitempty"`
+	FilesDownloaded int `json:"files_downloaded,omitempty"`
+	FilesSkipped    int `json:"files_skipped,omitempty"`
+	FilesUploaded   int `json:"files_uploaded,omitempty"`
+	ImagesProcessed int `json:"images_processed,omitempty"`
+
 	// Error context
-	Error           *ErrorContext      `json:"error,omitempty"`
-	
+	Error *ErrorContext `json:"error,omitempty"`
+
 	// Additional context (flexible)
-	Context         map[string]any    `json:"context,omitempty"`
+	Context map[string]any `json:"context,omitempty"`
 
 	// important events bypass sampling (see OperationTracker.Important).
 	important bool
@@ -80,14 +80,14 @@ type ErrorContext struct {
 
 // Logger handles structured logging with wide events
 type Logger struct {
-	service     string
-	version     string
-	sampleRate  float64 // 0.0 to 1.0, percentage of successful events to log
-	errorRate   float64 // Always log errors (1.0)
-	slowThresholdMs int64 // Always log operations slower than this
-	logFile     *os.File // File handle for log output
-	logFilePath string   // Path to the log file
-	mu          sync.Mutex // Mutex for thread-safe file writes
+	service         string
+	version         string
+	sampleRate      float64    // 0.0 to 1.0, percentage of successful events to log
+	errorRate       float64    // Always log errors (1.0)
+	slowThresholdMs int64      // Always log operations slower than this
+	logFile         *os.File   // File handle for log output
+	logFilePath     string     // Path to the log file
+	mu              sync.Mutex // Mutex for thread-safe file writes
 
 	// events receives the JSON wide events when set (tests); otherwise they
 	// go to logFile, or to stderr if the log file could not be opened.
@@ -148,7 +148,7 @@ func (l *Logger) initLogFile() {
 		fmt.Fprintf(os.Stderr, "WARNING: Failed to create logs directory (events go to stderr): %v\n", err)
 		return
 	}
-	
+
 	// Generate unique filename using timestamp
 	now := time.Now()
 	timestamp := now.Format("2006-01-02T15-04-05")
@@ -156,17 +156,17 @@ func (l *Logger) initLogFile() {
 	nanos := now.Nanosecond()
 	logFileName := fmt.Sprintf("run-%s-%09d.log", timestamp, nanos)
 	logFilePath := filepath.Join(logsDir, logFileName)
-	
+
 	// Open file in append mode (creates if doesn't exist)
 	logFile, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "WARNING: Failed to open log file %s (events go to stderr): %v\n", logFilePath, err)
 		return
 	}
-	
+
 	l.logFile = logFile
 	l.logFilePath = logFilePath
-	
+
 	// Write initial log entry
 	fmt.Fprintf(logFile, "=== Log run started at %s ===\n", now.Format(time.RFC3339Nano))
 }
@@ -196,7 +196,7 @@ func (l *Logger) GetLogFilePath() string {
 func (l *Logger) Close() error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	
+
 	if l.logFile != nil {
 		// Write closing entry
 		fmt.Fprintf(l.logFile, "=== Log run ended at %s ===\n", time.Now().Format(time.RFC3339Nano))
@@ -217,24 +217,24 @@ func (l *Logger) shouldSample(event *WideEvent) bool {
 	if event.Level == "error" || event.Error != nil {
 		return true
 	}
-	
+
 	// Always keep slow operations
 	if event.DurationMs > 0 && event.DurationMs > l.slowThresholdMs {
 		return true
 	}
-	
+
 	// Always keep warnings
 	if event.Level == "warn" {
 		return true
 	}
-	
+
 	// For successful operations, use sampling
 	if event.Outcome == "success" {
 		// Simple random sampling (in production, use better randomness)
 		// For now, we'll use a simple hash-based approach
 		return l.randomSample()
 	}
-	
+
 	// Default: log it
 	return true
 }
@@ -260,7 +260,7 @@ func (l *Logger) emit(event *WideEvent) {
 	if !l.shouldSample(event) {
 		return
 	}
-	
+
 	// Set default service and version if not set
 	if event.Service == "" {
 		event.Service = l.service
@@ -268,12 +268,12 @@ func (l *Logger) emit(event *WideEvent) {
 	if event.Version == "" {
 		event.Version = l.version
 	}
-	
+
 	// Ensure timestamp is set
 	if event.Timestamp == "" {
 		event.Timestamp = time.Now().UTC().Format(time.RFC3339Nano)
 	}
-	
+
 	// Marshal to JSON
 	jsonBytes, err := json.Marshal(event)
 	if err != nil {
@@ -341,7 +341,7 @@ func (l *Logger) Warnf(operation, format string, args ...any) {
 // StartOperation creates a new event and starts timing
 func (l *Logger) StartOperation(operation string) *OperationTracker {
 	return &OperationTracker{
-		logger:    l,
+		logger: l,
 		event: &WideEvent{
 			Operation: operation,
 			Timestamp: time.Now().UTC().Format(time.RFC3339Nano),

@@ -29,12 +29,10 @@ jobs:
       run: go vet ./...
 
     - name: Test
-      run: go test -v ./...
+      run: go test -race -cover ./...
 
   lint:
     runs-on: ubuntu-latest
-    # Non-blocking until the baseline findings are fixed (plan Step 8).
-    continue-on-error: true
     steps:
     - uses: actions/checkout@v4
 

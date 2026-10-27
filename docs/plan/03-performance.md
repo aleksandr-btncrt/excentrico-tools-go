@@ -61,7 +61,9 @@ default to `false` in `main.go`.
 
 ## 3.5 Live verification
 
-Status: **pending.** Run one film with `-film "<title>" -debug` and count
-`/wp/v2/media` requests in the run log (target ≤ 5). Blocked in this
-environment because the configured service account gets HTTP 403 reading the
-sheet (same on `main`).
+Status: **verified offline only.** The configured Google Sheet no longer
+exists (reads fail with HTTP 403, also on `main`), so no live run is possible.
+`TestCreateOrUpdate_MediaRequestBudget` drives the real `WordPressService`
+against a local server: 3 directors / 20 images → 1 media request. On the
+first run against a new sheet, run one film with `-film "<title>" -debug` and
+count `/wp/v2/media` requests in the run log (target ≤ 5).
