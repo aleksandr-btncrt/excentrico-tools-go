@@ -61,12 +61,12 @@ Ground rule for every step: `go build ./... && go vet ./... && go test ./...` mu
 
 ### Step 5 — Structure: schema package and interfaces (PR: "refactor: sheet package and consumer interfaces")
 
-- [ ] 5.1 Create `internal/sheet/` with `columns.go` (all header constants from `ConvertObjToFilmData`), `film.go` (move `FilmData` → `sheet.Film`, delete `services/film_data_service.go`), `row.go` (`RowToFilm(headers, row)`), `directors.go` (`(*Film).Directors()` — single regex), `options.go` (`Tab`, `EditionPrefix`).
-- [ ] 5.2 Add `sheet_tab` and `edition_prefix` to `config.Config` with defaults `"TODO"` / `"Excéntrico "`; update `configuration.json.example` and `CreateDefaultConfig`.
-- [ ] 5.3 `App.ProcessFilms` produces `[]*sheet.Film`; `Processor`, `drive.ProcessGoogleDriveFiles`, `wordpress.UploadMediaToWordPress`, `CreateOrUpdateWordPressProject` take `*sheet.Film`. Delete `ConvertObjToFilmData`, `parseDirectorNames`, `parseDirectors`, `utils.CellString` (no longer needed). Port `TestParseDirectorNames` to `sheet.Directors()`.
-- [ ] 5.4 Create `internal/film/deps.go` with `DriveClient`, `ImageResizer`, `WordPressClient`, `MetadataStore` interfaces; `NewProcessor` and the operation functions accept them; `app.New` wires concrete services. Convert `TursoService` typed helpers into free functions over `MetadataStore`.
-- [ ] 5.5 Add `internal/film/fakes_test.go` and the orchestration tests: director de-dup across two films, update-existing-post path.
-- [ ] 5.6 Verify: golden test unchanged; `go test ./internal/film/...` runs with no network.
+- [x] 5.1 Create `internal/sheet/` with `columns.go` (all header constants from `ConvertObjToFilmData`), `film.go` (move `FilmData` → `sheet.Film`, delete `services/film_data_service.go`), `row.go` (`RowToFilm(headers, row)`), `directors.go` (`(*Film).Directors()` — single regex), `options.go` (`Tab`, `EditionPrefix`).
+- [x] 5.2 Add `sheet_tab` and `edition_prefix` to `config.Config` with defaults `"TODO"` / `"Excéntrico "`; update `configuration.json.example` and `CreateDefaultConfig`.
+- [x] 5.3 `App.ProcessFilms` produces `[]*sheet.Film`; `Processor`, `drive.ProcessGoogleDriveFiles`, `wordpress.UploadMediaToWordPress`, `CreateOrUpdateWordPressProject` take `*sheet.Film`. Delete `ConvertObjToFilmData`, `parseDirectorNames`, `parseDirectors`, `utils.CellString` (no longer needed). Port `TestParseDirectorNames` to `sheet.Directors()`.
+- [x] 5.4 Create `internal/film/deps.go` with `DriveClient`, `ImageResizer`, `WordPressClient`, `MetadataStore` interfaces; `NewProcessor` and the operation functions accept them; `app.New` wires concrete services. Convert `TursoService` typed helpers into free functions over `MetadataStore`.
+- [x] 5.5 Add `internal/film/fakes_test.go` and the orchestration tests: director de-dup across two films, update-existing-post path.
+- [x] 5.6 Verify: golden test unchanged; `go test ./internal/film/...` runs with no network.
 
 ### Step 6 — Performance (PR: "perf: media cache and single template generation")
 

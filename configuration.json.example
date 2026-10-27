@@ -15,5 +15,7 @@
   "turso_config": {
     "database_url": "libsql://your-database-url.turso.io",
     "auth_token": "your-turso-auth-token"
-  }
+  },
+  "sheet_tab": "TODO",
+  "edition_prefix": "Excéntrico "
 } 

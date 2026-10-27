@@ -13,7 +13,18 @@ type Config struct {
 	WordPressConfig       WordPressConfig `json:"wordpress_config"`
 	ImageConfig           ImageConfig     `json:"image_config"`
 	TursoConfig           TursoConfig     `json:"turso_config"`
+	// SheetTab is the spreadsheet tab holding the film rows (default "TODO").
+	SheetTab string `json:"sheet_tab,omitempty"`
+	// EditionPrefix is prepended to -year to match the EDICIÓN column
+	// (default "Excéntrico ", so -year 2026 matches "Excéntrico 2026").
+	EditionPrefix string `json:"edition_prefix,omitempty"`
 }
+
+// Defaults for the sheet layout.
+const (
+	DefaultSheetTab      = "TODO"
+	DefaultEditionPrefix = "Excéntrico "
+)
 
 type WordPressConfig struct {
 	BaseURL             string `json:"base_url"`
@@ -74,6 +85,12 @@ func Load() (*Config, error) {
 	if cfg.GoogleCredentialsPath == "" {
 		cfg.GoogleCredentialsPath = "credentials.json"
 	}
+	if cfg.SheetTab == "" {
+		cfg.SheetTab = DefaultSheetTab
+	}
+	if cfg.EditionPrefix == "" {
+		cfg.EditionPrefix = DefaultEditionPrefix
+	}
 
 	if cfg.GoogleSheetID == "" {
 		return nil, fmt.Errorf("google_sheet_id is required in configuration")
@@ -132,6 +149,8 @@ func CreateDefaultConfig() error {
 			DatabaseURL: "libsql://your-database-url.turso.io",
 			AuthToken:   "your-turso-auth-token",
 		},
+		SheetTab:      DefaultSheetTab,
+		EditionPrefix: DefaultEditionPrefix,
 	}
 
 	configData, err := json.MarshalIndent(defaultConfig, "", "  ")

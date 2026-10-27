@@ -1,25 +1,10 @@
 package utils
 
 import (
-	"fmt"
 	"path/filepath"
 	"regexp"
 	"strings"
 )
-
-// CellString converts a Google Sheet cell value to a string without panicking.
-// nil becomes "", strings are returned unchanged, and any other type (numbers
-// from the xlsx fallback, booleans, ...) is formatted with fmt.Sprint.
-func CellString(v any) string {
-	switch s := v.(type) {
-	case nil:
-		return ""
-	case string:
-		return s
-	default:
-		return fmt.Sprint(s)
-	}
-}
 
 // SanitizeFilename cleans a filename to be safe for filesystem use
 func SanitizeFilename(name string) string {

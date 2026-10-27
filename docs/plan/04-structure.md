@@ -30,6 +30,20 @@ become free functions over `services.MetadataStore`.
 cover director de-duplication across films and the update-existing-post path,
 with no network access.
 
+Implementation notes (Step 5):
+
+- The narrow interfaces are `drive.Client`, `drive.Resizer`,
+  `wordpress.Client` and `services.MediaClient` (what Divi generation needs:
+  `GetMedia` + `Download`); `services.MetadataStore` has `SaveMetadata` /
+  `GetMetadata`. Compile-time assertions tie each to its concrete service.
+- `sheet.Film.Title()` is the film identity everywhere. Previously an
+  untitled row used `"Untitled Film"` in the post step and `"unnamed_film"`
+  for the directory and media metadata, so its stored post was never found
+  again; the post slug still omits the title when TÍTULO ORIGINAL is empty.
+- `formatDirectors` (caption) uses `sheet.SplitDirectors`; the media and
+  Divi steps use `(*Film).Directors()`, which only splits when "Multi Dir"
+  is "SI" — the same rules as before, now in one place.
+
 ## 4.3 Splitting `divi_template.go`
 
 - `template_data.go` — template configuration types and validation.

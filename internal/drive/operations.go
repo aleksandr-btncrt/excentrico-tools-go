@@ -8,20 +8,41 @@ import (
 	"path/filepath"
 	"strings"
 
+	gdrive "google.golang.org/api/drive/v3"
+
 	"excentrico-tools-go/internal/debug"
 	"excentrico-tools-go/internal/logger"
 	"excentrico-tools-go/internal/models"
 	"excentrico-tools-go/internal/services"
+	"excentrico-tools-go/internal/sheet"
 	"excentrico-tools-go/internal/utils"
 )
 
+// Client is the Google Drive API surface used here
+// (*services.GoogleDriveService in production).
+type Client interface {
+	ListFiles(ctx context.Context, folderID string) ([]*gdrive.File, error)
+	DownloadFile(ctx context.Context, fileID, destinationPath string) error
+}
+
+// Resizer produces the optimised *_web.jpg copy of an image
+// (*services.ImageService in production).
+type Resizer interface {
+	ResizeImage(inputPath, outputPath string) error
+}
+
+var (
+	_ Client  = (*services.GoogleDriveService)(nil)
+	_ Resizer = (*services.ImageService)(nil)
+)
+
 // ListAllFilesRecursively lists all files in a folder and its subfolders
-func ListAllFilesRecursively(ctx context.Context, driveService *services.GoogleDriveService, folderID string) ([]*models.FileWithPath, error) {
+func ListAllFilesRecursively(ctx context.Context, driveService Client, folderID string) ([]*models.FileWithPath, error) {
 	return ListAllFilesRecursivelyWithPath(ctx, driveService, folderID, "")
 }
 
 // ListAllFilesRecursivelyWithPath lists all files recursively with the current path context
-func ListAllFilesRecursivelyWithPath(ctx context.Context, driveService *services.GoogleDriveService, folderID string, currentPath string) ([]*models.FileWithPath, error) {
+func ListAllFilesRecursivelyWithPath(ctx context.Context, driveService Client, folderID string, currentPath string) ([]*models.FileWithPath, error) {
 	var allFiles []*models.FileWithPath
 
 	debug.Printf("Listing contents of folder ID: %s (path: %s)", folderID, currentPath)
@@ -81,7 +102,7 @@ func ListAllFilesRecursivelyWithPath(ctx context.Context, driveService *services
 }
 
 // DownloadFile downloads a file from Google Drive to the specified destination
-func DownloadFile(ctx context.Context, driveService *services.GoogleDriveService, fileID, destinationPath string) error {
+func DownloadFile(ctx context.Context, driveService Client, fileID, destinationPath string) error {
 	l := logger.Get()
 	op := l.StartOperation("download_drive_file")
 	op.WithDrive("", fileID, filepath.Base(destinationPath))
@@ -117,8 +138,12 @@ func isAllowedFolder(folderName string) bool {
 	return false
 }
 
-// ProcessGoogleDriveFiles processes all files from a Google Drive folder
-func ProcessGoogleDriveFiles(ctx context.Context, filmDir string, driveService *services.GoogleDriveService, imageService *services.ImageService, tursoService *services.TursoService, filmName string, enlacesStr string) error {
+// ProcessGoogleDriveFiles downloads the images of the film's ENLACES Drive
+// folder (allowed subfolders only), resizes them to *_web.jpg and stores the
+// file list in the metadata store.
+func ProcessGoogleDriveFiles(ctx context.Context, filmDir string, driveService Client, imageService Resizer, tursoService services.MetadataStore, film *sheet.Film) error {
+	filmName := film.Title()
+	enlacesStr := film.Enlaces
 	l := logger.Get()
 	op := l.StartOperation("process_drive_files")
 	
@@ -176,7 +201,7 @@ func ProcessGoogleDriveFiles(ctx context.Context, filmDir string, driveService *
 	missingCount := 0
 	newCount := 0
 
-	err = tursoService.GetDriveFilesMetadata(filmID, &existingFiles)
+	err = services.GetDriveFilesMetadata(tursoService, filmID, &existingFiles)
 	if err != nil {
 		if errors.Is(err, services.ErrMetadataNotFound) {
 			op.WithContext("existing_metadata", false)
@@ -315,7 +340,7 @@ func ProcessGoogleDriveFiles(ctx context.Context, filmDir string, driveService *
 		imageFiles = append(imageFiles, fileInfo)
 	}
 
-	if err := tursoService.SaveDriveFilesMetadata(filmID, imageFiles); err != nil {
+	if err := services.SaveDriveFilesMetadata(tursoService, filmID, imageFiles); err != nil {
 		op.Fail("Failed to save Drive media metadata", err)
 		return fmt.Errorf("failed to save Drive media metadata: %v", err)
 	}

@@ -6,7 +6,9 @@ import (
 	"strings"
 	"testing"
 
+	"excentrico-tools-go/internal/config"
 	"excentrico-tools-go/internal/logger"
+	"excentrico-tools-go/internal/sheet"
 )
 
 func sheetData() [][]any {
@@ -18,58 +20,26 @@ func sheetData() [][]any {
 	}
 }
 
-func TestRowsToObjects_KeepsColumnsAligned(t *testing.T) {
-	objs := rowsToObjects(sheetData())
-	if len(objs) != 3 {
-		t.Fatalf("got %d objects, want 3", len(objs))
+func TestSheetOptionsFromConfig(t *testing.T) {
+	if got := (&App{}).sheetOptions(); got != sheet.DefaultOptions() {
+		t.Errorf("no config: %+v, want defaults", got)
 	}
-	// The empty second header must not shift later columns.
-	if got := objs[0]["EDICIÓN"]; got != "Excéntrico 2026" {
-		t.Errorf("EDICIÓN = %v, want Excéntrico 2026", got)
-	}
-	if _, ok := objs[0][""]; ok {
-		t.Error("empty header should not become a key")
-	}
-	// Missing trailing cells become "".
-	if got := objs[1]["DIRECCIÓN"]; got != "" {
-		t.Errorf("missing cell = %v, want empty string", got)
+	a := &App{config: &config.Config{SheetTab: "2026", EditionPrefix: "Fest "}}
+	got := a.sheetOptions()
+	if got.DataRange() != "2026!A:ZZ" || got.Edition("2026") != "Fest 2026" {
+		t.Errorf("configured options = %+v", got)
 	}
 }
 
-func TestFilterRows(t *testing.T) {
-	objs := rowsToObjects(sheetData())
-	titles := func(rows []map[string]any) string {
-		var ts []string
-		for _, r := range rows {
-			ts = append(ts, filmTitle(r))
-		}
-		return strings.Join(ts, "|")
-	}
-	tests := []struct {
-		year, film, want string
-	}{
-		{"", "", "Meshes of the Afternoon|La Jetée|Old Film"},
-		{"2026", "", "Meshes of the Afternoon|La Jetée"},
-		{"2026", "la jetée", "La Jetée"},
-		{"2026", "Old Film", ""},
-		{"", "  old film ", "Old Film"},
-	}
-	for _, tt := range tests {
-		if got := titles(filterRows(objs, tt.year, tt.film)); got != tt.want {
-			t.Errorf("filterRows(year=%q, film=%q) = %q, want %q", tt.year, tt.film, got, tt.want)
-		}
-	}
-}
-
-func TestProcessFilteredObjects_DryRun(t *testing.T) {
+func TestProcessFilms_DryRun(t *testing.T) {
 	var events, progress bytes.Buffer
 	prev := logger.SetDefault(logger.NewWithWriters("test", &events, &progress))
 	defer logger.SetDefault(prev)
 
 	t.Chdir(t.TempDir())
 	a := &App{} // a dry run must not touch any service
-	films := filterRows(rowsToObjects(sheetData()), "2026", "")
-	if err := a.processFilteredObjects(context.Background(), films, ProcessOptions{Year: "2026", DryRun: true}); err != nil {
+	films := sheet.DefaultOptions().Select(sheet.Films(sheetData()), "2026", "")
+	if err := a.processFilms(context.Background(), films, ProcessOptions{Year: "2026", DryRun: true}); err != nil {
 		t.Fatalf("dry run: %v", err)
 	}
 
@@ -88,7 +58,7 @@ func TestProcessFilteredObjects_DryRun(t *testing.T) {
 	}
 }
 
-func TestProcessFilteredObjects_StopsWhenCancelled(t *testing.T) {
+func TestProcessFilms_StopsWhenCancelled(t *testing.T) {
 	var progress bytes.Buffer
 	prev := logger.SetDefault(logger.NewWithWriters("test", &bytes.Buffer{}, &progress))
 	defer logger.SetDefault(prev)
@@ -96,7 +66,7 @@ func TestProcessFilteredObjects_StopsWhenCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	a := &App{}
-	err := a.processFilteredObjects(ctx, rowsToObjects(sheetData()), ProcessOptions{DryRun: true})
+	err := a.processFilms(ctx, sheet.Films(sheetData()), ProcessOptions{DryRun: true})
 	if err == nil || !strings.Contains(progress.String(), "Interrupted after 0 of 3 films") {
 		t.Errorf("err = %v, progress = %q; want interruption before the first film", err, progress.String())
 	}

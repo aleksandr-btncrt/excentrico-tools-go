@@ -18,6 +18,7 @@ import (
 	"excentrico-tools-go/internal/logger"
 	"excentrico-tools-go/internal/models"
 	"excentrico-tools-go/internal/services"
+	"excentrico-tools-go/internal/sheet"
 	"excentrico-tools-go/internal/utils"
 )
 
@@ -53,42 +54,28 @@ func isPathUnderDirectorDir(path string) bool {
 	return false
 }
 
-// parseDirectorNames returns director names from raw film data (sheet columns
-// "DIRECCIÓN" and "Multi Dir"). These must match the raw Google Sheet column
-// names used in ConvertObjToFilmData, since this function operates on the raw
-// map[string]any row rather than the mapped FilmData struct.
-func parseDirectorNames(filmData map[string]any) []string {
-	if filmData == nil {
-		return nil
-	}
-	d := utils.CellString(filmData["DIRECCIÓN"])
-	if d == "" {
-		return nil
-	}
-	multi := utils.CellString(filmData["Multi Dir"])
-	if strings.ToUpper(strings.TrimSpace(multi)) == "SI" {
-		re := regexp.MustCompile(`\s*,\s*|\s+\+\s+|\s+y\s+|\s*&\s*`)
-		parts := re.Split(d, -1)
-		var names []string
-		for _, p := range parts {
-			p = strings.TrimSpace(p)
-			if p != "" {
-				names = append(names, p)
-			}
-		}
-		return names
-	}
-	return []string{strings.TrimSpace(d)}
-}
-
 // normalizeDirectorCacheKey returns a stable key for director media cache.
 func normalizeDirectorCacheKey(name string) string {
 	return strings.ToLower(strings.TrimSpace(name))
 }
 
+// Client is the WordPress REST surface used by the operations here
+// (*services.WordPressService in production).
+type Client interface {
+	services.MediaClient
+	SearchMedia(ctx context.Context, search string) ([]*services.WordPressMedia, error)
+	UploadMediaFromFile(ctx context.Context, filePath, title, altText string) (*services.WordPressMedia, error)
+	GetCategoryIDsByNames(ctx context.Context, year string, categoryNames []string) ([]int, error)
+	CreatePost(ctx context.Context, post *services.WordPressPost) (*services.WordPressPost, error)
+	UpdatePost(ctx context.Context, postID int, post *services.WordPressPost) (*services.WordPressPost, error)
+}
+
+var _ Client = (*services.WordPressService)(nil)
+
 // UploadMediaToWordPress uploads optimized images to WordPress. Director images (under a "Dir" folder)
 // are uploaded with the director name as title and deduplicated via cache and WordPress search.
-func UploadMediaToWordPress(ctx context.Context, wordpressService *services.WordPressService, tursoService *services.TursoService, filmDir string, filmTitle string, filmData map[string]any) ([]int, error) {
+func UploadMediaToWordPress(ctx context.Context, wordpressService Client, tursoService services.MetadataStore, filmDir string, film *sheet.Film) ([]int, error) {
+	filmTitle := film.Title()
 	l := logger.Get()
 	op := l.StartOperation("upload_wordpress_media")
 	
@@ -97,7 +84,7 @@ func UploadMediaToWordPress(ctx context.Context, wordpressService *services.Word
 	op.WithContext("film_dir", filmDir)
 
 	metadata := &models.WordPressMetadata{}
-	err := tursoService.GetWordPressMetadata(filmID, metadata)
+	err := services.GetWordPressMetadata(tursoService, filmID, metadata)
 	if err != nil {
 		if errors.Is(err, services.ErrMetadataNotFound) {
 			op.WithContext("existing_metadata", false)
@@ -140,15 +127,15 @@ func UploadMediaToWordPress(ctx context.Context, wordpressService *services.Word
 
 	op.WithContext("web_file_count", len(entries))
 
-	directorNames := parseDirectorNames(filmData)
+	directorNames := film.Directors()
 
 	directorCache := make(map[string]services.DirectorMediaCacheEntry)
-	if getCacheErr := tursoService.GetDirectorMediaCache(&directorCache); getCacheErr != nil && !errors.Is(getCacheErr, services.ErrMetadataNotFound) {
+	if getCacheErr := services.GetDirectorMediaCache(tursoService, &directorCache); getCacheErr != nil && !errors.Is(getCacheErr, services.ErrMetadataNotFound) {
 		l.Warnf("director_media_cache", "Failed to load director media cache: %v", getCacheErr)
 	}
 
 	existingImageMetadata := make(map[string]int)
-	err = tursoService.GetWPImagesMetadata(filmID, &existingImageMetadata)
+	err = services.GetWPImagesMetadata(tursoService, filmID, &existingImageMetadata)
 	if err != nil {
 		if !errors.Is(err, services.ErrMetadataNotFound) {
 			l.Warnf("upload_wordpress_media", "Failed to load existing image metadata for '%s': %v", filmTitle, err)
@@ -242,14 +229,14 @@ func UploadMediaToWordPress(ctx context.Context, wordpressService *services.Word
 					titleForMeta = media.Title.String()
 					altTextForMeta = media.AltText
 					directorCache[cacheKey] = services.DirectorMediaCacheEntry{ID: media.ID, SourceURL: media.SourceURL}
-					if saveErr := tursoService.SaveDirectorMediaCache(directorCache); saveErr != nil {
+					if saveErr := services.SaveDirectorMediaCache(tursoService, directorCache); saveErr != nil {
 						l.Warnf("director_media_cache", "Failed to save director media cache: %v", saveErr)
 					}
 					uploadedCount++
 					l.StartOperation("upload_single_media").WithFilm(filmID, filmTitle, "", "").WithContext("file_name", fileName).Complete(fmt.Sprintf("Uploaded director image for '%s'", directorName))
 				} else {
 					skippedCount++
-					if saveErr := tursoService.SaveDirectorMediaCache(directorCache); saveErr != nil {
+					if saveErr := services.SaveDirectorMediaCache(tursoService, directorCache); saveErr != nil {
 						l.Warnf("director_media_cache", "Failed to save director media cache: %v", saveErr)
 					}
 				}
@@ -303,14 +290,14 @@ func UploadMediaToWordPress(ctx context.Context, wordpressService *services.Word
 	}
 
 	if len(uploadedMedia) > 0 {
-		if err := tursoService.SaveMetadata(filmID, "wordpress_media", uploadedMedia); err != nil {
+		if err := tursoService.SaveMetadata(filmID, services.MetadataWordPressMedia, uploadedMedia); err != nil {
 			op.Warn(&logger.WideEvent{
 				Message: "Failed to save media metadata",
 			})
 		}
 	}
 
-	if err := tursoService.SaveWPImagesMetadata(filmID, imageMetadataMap); err != nil {
+	if err := services.SaveWPImagesMetadata(tursoService, filmID, imageMetadataMap); err != nil {
 		op.Warn(&logger.WideEvent{
 			Message: "Failed to save image metadata",
 		})
@@ -330,26 +317,24 @@ func UploadMediaToWordPress(ctx context.Context, wordpressService *services.Word
 
 // CreateOrUpdateWordPressProject creates or updates the film's WordPress
 // project post and returns its post ID.
-func CreateOrUpdateWordPressProject(ctx context.Context, wordpressService *services.WordPressService, diviTemplateService *services.DiviTemplateService, tursoService *services.TursoService, filmDir string, filmData map[string]any, year string, imageIds []int, templateConfig services.TemplateData) (int, error) {
+func CreateOrUpdateWordPressProject(ctx context.Context, wordpressService Client, diviTemplateService *services.DiviTemplateService, tursoService services.MetadataStore, filmDir string, film *sheet.Film, year string, imageIds []int, templateConfig services.TemplateData) (int, error) {
 	l := logger.Get()
 	op := l.StartOperation("create_update_wordpress_project")
-	
-	filmTitle := "Untitled Film"
-	if title := utils.CellString(filmData["TÍTULO ORIGINAL"]); title != "" {
-		filmTitle = title
-	}
 
+	// Same identity as UploadMediaToWordPress and the film directory, so the
+	// stored metadata is found again (previously an untitled row used
+	// "Untitled Film" here and "unnamed_film" elsewhere).
+	filmTitle := film.Title()
 	filmID := utils.SanitizeFilename(filmTitle)
-	
-	section := utils.CellString(filmData["SECCIÓN"])
-	
+	section := film.Seccion
+
 	op.WithFilm(filmID, filmTitle, year, section)
 	op.WithContext("film_dir", filmDir)
 	op.WithContext("image_count", len(imageIds))
 
 	var metadata *models.WordPressMetadata
 	existingMetadata := &models.WordPressMetadata{}
-	err := tursoService.GetWordPressMetadata(filmID, existingMetadata)
+	err := services.GetWordPressMetadata(tursoService, filmID, existingMetadata)
 	if err != nil {
 		if errors.Is(err, services.ErrMetadataNotFound) {
 			op.WithContext("existing_metadata", false)
@@ -365,7 +350,7 @@ func CreateOrUpdateWordPressProject(ctx context.Context, wordpressService *servi
 	}
 
 	slugParts := []string{}
-	if filmTitle != "Untitled Film" {
+	if film.HasTitle() {
 		slugParts = append(slugParts, filmTitle)
 	}
 	if section != "" {
@@ -380,13 +365,11 @@ func CreateOrUpdateWordPressProject(ctx context.Context, wordpressService *servi
 		slugText = "untitled-film"
 	}
 
-	filmDataStruct := ConvertObjToFilmData(filmData)
-
-	_, _ = diviTemplateService.GenerateCompleteTemplate(ctx, filmDataStruct, imageIds, wordpressService, tursoService, filmID, year, templateConfig)
+	_, _ = diviTemplateService.GenerateCompleteTemplate(ctx, film, imageIds, wordpressService, tursoService, filmID, year, templateConfig)
 
 	var categoryIDs []int
-	if filmDataStruct.Seccion != "" {
-		categoryNames := services.ParseCategoryString(filmDataStruct.Seccion)
+	if film.Seccion != "" {
+		categoryNames := services.ParseCategoryString(film.Seccion)
 		if len(categoryNames) > 0 {
 			var err error
 			categoryIDs, err = wordpressService.GetCategoryIDsByNames(ctx, year, categoryNames)
@@ -460,7 +443,7 @@ func CreateOrUpdateWordPressProject(ctx context.Context, wordpressService *servi
 		updateOp.Complete(fmt.Sprintf("Updated WordPress post ID %d", updatedPost.ID))
 	}
 
-	if err := tursoService.SaveWordPressMetadata(filmID, metadata); err != nil {
+	if err := services.SaveWordPressMetadata(tursoService, filmID, metadata); err != nil {
 		op.Fail("Failed to save WordPress metadata", err)
 		return 0, fmt.Errorf("failed to save WordPress metadata: %v", err)
 	}
@@ -473,7 +456,7 @@ func CreateOrUpdateWordPressProject(ctx context.Context, wordpressService *servi
 		// Don't return error here as this is not critical
 	}
 
-	if err := diviTemplateService.SaveDiviTemplateToFile(ctx, filmDataStruct, imageIds, wordpressService, tursoService, filmID, filmDir, year, metadata.PostID, templateConfig ); err != nil {
+	if err := diviTemplateService.SaveDiviTemplateToFile(ctx, film, imageIds, wordpressService, tursoService, filmID, filmDir, year, metadata.PostID, templateConfig); err != nil {
 		op.Fail("Failed to save Divi template to file", err)
 		return 0, fmt.Errorf("failed to save Divi template to file: %v", err)
 	}
@@ -486,7 +469,7 @@ func CreateOrUpdateWordPressProject(ctx context.Context, wordpressService *servi
 // selectFeaturedMediaID attempts to pick the most suitable featured image ID
 // Preference order by media title/filename/alt text contains: poster, portada, cover
 // Fallbacks to the first available image ID
-func selectFeaturedMediaID(ctx context.Context, imageIds []int, wordpressService *services.WordPressService) int {
+func selectFeaturedMediaID(ctx context.Context, imageIds []int, wordpressService services.MediaClient) int {
 	if wordpressService == nil || len(imageIds) == 0 {
 		return 0
 	}
@@ -526,10 +509,10 @@ func selectFeaturedMediaID(ctx context.Context, imageIds []int, wordpressService
 }
 
 // updateMediaMetadataWithPostID updates media metadata with the correct PostID
-func updateMediaMetadataWithPostID(tursoService *services.TursoService, filmID string, postID int) error {
+func updateMediaMetadataWithPostID(tursoService services.MetadataStore, filmID string, postID int) error {
 	// Get existing media metadata
 	var mediaMetadata []models.MediaInfo
-	err := tursoService.GetMetadata(filmID, "wordpress_media", &mediaMetadata)
+	err := tursoService.GetMetadata(filmID, services.MetadataWordPressMedia, &mediaMetadata)
 	if err != nil {
 		if errors.Is(err, services.ErrMetadataNotFound) {
 			// No media metadata to update
@@ -551,83 +534,8 @@ func updateMediaMetadataWithPostID(tursoService *services.TursoService, filmID s
 
 	// Save updated metadata if any changes were made
 	if updated {
-		return tursoService.SaveMetadata(filmID, "wordpress_media", mediaMetadata)
+		return tursoService.SaveMetadata(filmID, services.MetadataWordPressMedia, mediaMetadata)
 	}
 
 	return nil
-}
-
-// ConvertObjToFilmData converts a map[string]any to a FilmData struct
-func ConvertObjToFilmData(obj map[string]any) *services.FilmData {
-	filmData := &services.FilmData{
-		AdditionalFields: make(map[string]string),
-	}
-
-	getString := func(key string) string {
-		return utils.CellString(obj[key])
-	}
-
-	filmData.TituloOriginal = getString("TÍTULO ORIGINAL")
-	filmData.Direccion = getString("DIRECCIÓN")
-	filmData.Pais = getString("PAIS")
-	filmData.Ano = getString("AÑO")
-	filmData.Duracion = getString("DURAC.")
-	filmData.Edicion = getString("EDICIÓN")
-	filmData.Seccion = getString("SECCIÓN")
-	filmData.Tipo = getString("TIPO")
-	filmData.SocialEtiquetas = getString("SOCIAL/ETIQUETAS")
-	filmData.Idiomas = getString("Idioma(s) / Language(s)")
-	filmData.RelacionAspectRatio = getString("Relación / Aspect Ratio (4:3, 16:9 u otro)")
-	filmData.SinopsisExtendida = getString("Sinopsis extendida (máximo 70 palabras)")
-	filmData.ExtendedSynopsis = getString("Extended synopsis (english)")
-	filmData.SinopsisCompacta = getString("Sinopsis compacta  (máximo 10 palabras)")
-	filmData.ShortSynopsis = getString("Short Synopsis (log line - Uso Pink Label)")
-	filmData.NotasContenido = getString("Notas de contenido / Content notes (*)")
-	filmData.NotaIntencion = getString("Nota de intención")
-	filmData.Produccion = getString("Producción / Producer(s)")
-	filmData.Guion = getString("Guión")
-	filmData.CamaraFoto = getString("Cámara - Foto / Camera - Photography")
-	filmData.ArteDiseno = getString("Arte - Diseño / Art/Design")
-	filmData.SonidoMusica = getString("Sonido - Música / Sound - Music")
-	filmData.EdicionCredits = getString("Edición / Editor(s)")
-	filmData.Interpretes = getString("Intérpretes (especificar pronombres para subtítulos)/ Cast (please specify pronouns for subtitles)")
-	filmData.OtrosCreditos = getString("Otros créditos / Other credits")
-	filmData.FestivalesPremios = getString("Festivales y premios / Festivals & Awards")
-	filmData.BioRealizadorxs = getString("Bio Realizadorxs / Filmaker's Bio (min 150 - max 1500 caracteres)")
-	filmData.CorreoElectronico = getString("Correo electrónico / Email")
-	filmData.Telefono = getString("Teléfono / Phone number")
-	filmData.Enlaces = getString("ENLACES")
-	filmData.WebExcentrico = getString("Web Excentrico")
-	filmData.ImagenesBaja = getString("imágenes en baja")
-	filmData.ObsSubtitulos = getString("Obs. Subtitulos")
-	filmData.PublishedStatus = getString("Published Status")
-	filmData.Categoria = getString("Categoría")
-	filmData.MultiDir = getString("Multi Dir")
-
-	knownFields := map[string]bool{
-		"TÍTULO ORIGINAL": true, "DIRECCIÓN": true, "PAIS": true, "AÑO": true, "DURAC.": true, "EDICIÓN": true,
-		"SECCIÓN": true, "TIPO": true, "SOCIAL/ETIQUETAS": true, "Idioma(s) / Language(s)": true,
-		"Relación / Aspect Ratio (4:3, 16:9 u otro)": true, "Sinopsis extendida (máximo 70 palabras)": true,
-		"Extended synopsis (english)": true, "Sinopsis compacta  (máximo 10 palabras)": true,
-		"Short Synopsis (log line - Uso Pink Label)": true, "Notas de contenido / Content notes (*)": true,
-		"Nota de intención": true, "Producción / Producer(s)": true, "Guión": true,
-		"Cámara - Foto / Camera - Photography": true, "Arte - Diseño / Art/Design": true,
-		"Sonido - Música / Sound - Music": true, "Edición / Editor(s)": true,
-		"Intérpretes (especificar pronombres para subtítulos)/ Cast (please specify pronouns for subtitles)": true,
-		"Otros créditos / Other credits": true, "Festivales y premios / Festivals & Awards": true,
-		"Bio Realizadorxs / Filmaker's Bio (min 150 - max 1500 caracteres)": true,
-		"Correo electrónico / Email":                                        true, "Teléfono / Phone number": true, "ENLACES": true,
-		"Web Excentrico": true, "imágenes en baja": true, "Obs. Subtitulos": true,
-		"Published Status": true, "Categoría": true, "Multi Dir": true,
-	}
-
-	for key, value := range obj {
-		if !knownFields[key] && value != nil {
-			if strValue, ok := value.(string); ok && strValue != "" {
-				filmData.AdditionalFields[key] = strValue
-			}
-		}
-	}
-
-	return filmData
 }

@@ -7,11 +7,11 @@ import (
 	"excentrico-tools-go/internal/debug"
 	"excentrico-tools-go/internal/logger"
 	"excentrico-tools-go/internal/models"
+	"excentrico-tools-go/internal/sheet"
 	"fmt"
 	"html"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 )
 
@@ -137,41 +137,24 @@ type Credits struct {
 	OtherCredits string `json:"other_credits,omitempty"`
 }
 
-func parseDirectors(directorString string) []string {
-	re := regexp.MustCompile(`\s*,\s*|\s+\+\s+|\s+y\s+|\s*&\s*`)
-	directors := re.Split(directorString, -1)
-
-	var result []string
-	for _, name := range directors {
-		name = strings.TrimSpace(name)
-		if len(name) > 0 {
-			result = append(result, name)
-		}
-	}
-
-	return result
+// MediaClient is what Divi template generation needs from WordPress:
+// media lookup (director, background and gallery images) and downloads.
+type MediaClient interface {
+	GetMedia(ctx context.Context, mediaID int) (*WordPressMedia, error)
+	Download(ctx context.Context, url string) ([]byte, error)
 }
 
-func (s *DiviTemplateService) GenerateDiviTemplateDataWithWordPress(ctx context.Context, filmData *FilmData, imageIds []int, wordpressService *WordPressService, tursoService *TursoService, filmID string) *DiviFilmTemplate {
-	// Parse directors with bio information
+var _ MediaClient = (*WordPressService)(nil)
+
+func (s *DiviTemplateService) GenerateDiviTemplateDataWithWordPress(ctx context.Context, filmData *sheet.Film, imageIds []int, wordpressService MediaClient, tursoService MetadataStore, filmID string) *DiviFilmTemplate {
+	// Directors with bio information ("Multi Dir" = SI splits DIRECCIÓN).
 	var directors []DirectorInfo
-	if filmData.Direccion != "" {
-		if strings.ToUpper(filmData.MultiDir) == "SI" {
-			directorNames := parseDirectors(filmData.Direccion)
-			for _, name := range directorNames {
-				directors = append(directors, DirectorInfo{
-					Name:     name,
-					Bio:      filmData.BioRealizadorxs,
-					ImageURL: s.findDirectorImage(ctx, name, imageIds, wordpressService),
-				})
-			}
-		} else {
-			directors = append(directors, DirectorInfo{
-				Name:     filmData.Direccion,
-				Bio:      filmData.BioRealizadorxs,
-				ImageURL: s.findDirectorImage(ctx, filmData.Direccion, imageIds, wordpressService),
-			})
-		}
+	for _, name := range filmData.Directors() {
+		directors = append(directors, DirectorInfo{
+			Name:     name,
+			Bio:      filmData.BioRealizadorxs,
+			ImageURL: s.findDirectorImage(ctx, name, imageIds, wordpressService),
+		})
 	}
 
 	// Format duration
@@ -228,14 +211,14 @@ func (s *DiviTemplateService) GenerateDiviTemplateDataWithWordPress(ctx context.
 
 // filterStillsImages filters imageIds to only include images from the Stills folder
 // Uses drive metadata to determine which images are from the Stills folder
-func (s *DiviTemplateService) filterStillsImages(imageIds []int, tursoService *TursoService, filmID string) []int {
+func (s *DiviTemplateService) filterStillsImages(imageIds []int, tursoService MetadataStore, filmID string) []int {
 	if tursoService == nil || len(imageIds) == 0 || filmID == "" {
 		return []int{}
 	}
 
 	// Get WordPress media metadata to map image IDs to file paths
 	var wpMediaMetadata []models.MediaInfo
-	err := tursoService.GetMetadata(filmID, "wordpress_media", &wpMediaMetadata)
+	err := tursoService.GetMetadata(filmID, MetadataWordPressMedia, &wpMediaMetadata)
 	if err != nil {
 		// If no WordPress media metadata, return empty
 		return []int{}
@@ -251,7 +234,7 @@ func (s *DiviTemplateService) filterStillsImages(imageIds []int, tursoService *T
 
 	// Get drive files metadata
 	var driveFiles []*models.FileWithPath
-	err = tursoService.GetDriveFilesMetadata(filmID, &driveFiles)
+	err = GetDriveFilesMetadata(tursoService, filmID, &driveFiles)
 	if err != nil {
 		// If no drive metadata, return empty
 		return []int{}
@@ -301,7 +284,7 @@ func (s *DiviTemplateService) filterStillsImages(imageIds []int, tursoService *T
 // selectBackgroundImageURL attempts to pick a background image URL from media
 // Preference order by media title/filename/alt text contains: background, header, fondo, bg
 // Falls back to the first media URL if any
-func (s *DiviTemplateService) selectBackgroundImageURL(ctx context.Context, imageIds []int, wordpressService *WordPressService) string {
+func (s *DiviTemplateService) selectBackgroundImageURL(ctx context.Context, imageIds []int, wordpressService MediaClient) string {
 	if wordpressService == nil || len(imageIds) == 0 {
 		return ""
 	}
@@ -351,7 +334,7 @@ func (s *DiviTemplateService) GenerateDiviShortcodeTemplate(templateData *DiviFi
 	return composer.Compose()
 }
 
-func (s *DiviTemplateService) GenerateCompleteTemplate(ctx context.Context, filmData *FilmData, imageIds []int, wordpressService *WordPressService, tursoService *TursoService, filmID string, year string, templateConfig TemplateData) (*DiviFilmTemplate, string) {
+func (s *DiviTemplateService) GenerateCompleteTemplate(ctx context.Context, filmData *sheet.Film, imageIds []int, wordpressService MediaClient, tursoService MetadataStore, filmID string, year string, templateConfig TemplateData) (*DiviFilmTemplate, string) {
 	templateData := s.GenerateDiviTemplateDataWithWordPress(ctx, filmData, imageIds, wordpressService, tursoService, filmID)
 
 	shortcodes := s.GenerateDiviShortcodeTemplate(templateData, year, templateConfig)
@@ -431,7 +414,7 @@ type DiviTemplateFile struct {
 	Thumbnails   []any                    `json:"thumbnails"`
 }
 
-func (s *DiviTemplateService) SaveDiviTemplateToFile(ctx context.Context, filmData *FilmData, imageIds []int, wordpressService *WordPressService, tursoService *TursoService, filmID string, filmDir string, year string, wordpressPostID int, templateConfig TemplateData) error {
+func (s *DiviTemplateService) SaveDiviTemplateToFile(ctx context.Context, filmData *sheet.Film, imageIds []int, wordpressService MediaClient, tursoService MetadataStore, filmID string, filmDir string, year string, wordpressPostID int, templateConfig TemplateData) error {
 	_, shortcodes := s.GenerateCompleteTemplate(ctx, filmData, imageIds, wordpressService, tursoService, filmID, year, templateConfig)
 
 	// Use WordPress Post ID instead of film title for better consistency
@@ -489,7 +472,7 @@ func (s *DiviTemplateService) SaveDiviTemplateToFile(ctx context.Context, filmDa
 	return nil
 }
 
-func (s *DiviTemplateService) fetchWordPressImagesData(ctx context.Context, imageIds []int, wordpressService *WordPressService) (map[string]DiviImageData, error) {
+func (s *DiviTemplateService) fetchWordPressImagesData(ctx context.Context, imageIds []int, wordpressService MediaClient) (map[string]DiviImageData, error) {
 	images := make(map[string]DiviImageData)
 
 	for _, imageID := range imageIds {
@@ -517,7 +500,7 @@ func (s *DiviTemplateService) fetchWordPressImagesData(ctx context.Context, imag
 	return images, nil
 }
 
-func (s *DiviTemplateService) downloadAndEncodeImage(ctx context.Context, wordpressService *WordPressService, url string) (string, error) {
+func (s *DiviTemplateService) downloadAndEncodeImage(ctx context.Context, wordpressService MediaClient, url string) (string, error) {
 	imageData, err := wordpressService.Download(ctx, url)
 	if err != nil {
 		return "", fmt.Errorf("failed to download image: %w", err)
@@ -525,7 +508,7 @@ func (s *DiviTemplateService) downloadAndEncodeImage(ctx context.Context, wordpr
 	return base64.StdEncoding.EncodeToString(imageData), nil
 }
 
-func (s *DiviTemplateService) findDirectorImage(ctx context.Context, directorName string, imageIds []int, wordpressService *WordPressService) string {
+func (s *DiviTemplateService) findDirectorImage(ctx context.Context, directorName string, imageIds []int, wordpressService MediaClient) string {
 	if wordpressService == nil || len(imageIds) == 0 {
 		return ""
 	}
