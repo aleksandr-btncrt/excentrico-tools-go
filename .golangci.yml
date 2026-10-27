@@ -1,0 +1,32 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  default: none
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - unused
+    - gosec
+  settings:
+    gosec:
+      excludes:
+        # G304: file paths come from the operator's own configuration and
+        # from directories this tool creates; reading them is the point.
+        - G304
+  exclusions:
+    presets:
+      - std-error-handling
+    rules:
+      # Test helpers write fixtures with conventional permissions.
+      - path: _test\.go
+        linters:
+          - gosec
+
+formatters:
+  enable:
+    - gofmt

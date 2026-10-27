@@ -7,7 +7,8 @@ on:
   push:
     branches: [ "main" ]
   pull_request:
-    branches: [ "main" ]
+    # refactor/** so stacked PRs (based on the previous step's branch) get CI too.
+    branches: [ "main", "refactor/**" ]
 
 jobs:
 
@@ -24,5 +25,25 @@ jobs:
     - name: Build
       run: go build -v ./...
 
+    - name: Vet
+      run: go vet ./...
+
     - name: Test
       run: go test -v ./...
+
+  lint:
+    runs-on: ubuntu-latest
+    # Non-blocking until the baseline findings are fixed (plan Step 8).
+    continue-on-error: true
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: go.mod
+
+    - name: golangci-lint
+      uses: golangci/golangci-lint-action@v8
+      with:
+        version: latest

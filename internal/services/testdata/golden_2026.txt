@@ -1,0 +1,72 @@
+
+	[et_pb_section fb_built="1" fullwidth="on" _builder_version="4.27.4" global_colors_info="{}"]
+		[et_pb_fullwidth_header title="Las &#34;Chicas&#34; &amp; el Mar" subhead="Chile · 2025 · 72´30" _builder_version="4.27.4" title_font="|600||on|||||" title_text_color="#E8EAF1" subhead_text_color="#E8EAF1"  background_enable_color="off" use_background_color_gradient="on" background_color_gradient_stops="#24A68E 0%|#82d0d9 50%|#E6F543 100%" background_image="https://example.com/wp-content/uploads/bg_web.jpg" background_blend="multiply" width="99.9%" custom_padding="20%||2%||false|false" custom_padding_tablet="" custom_padding_phone="" custom_padding_last_edited="on|desktop" global_colors_info="{}"]
+		[/et_pb_fullwidth_header]
+	[/et_pb_section][et_pb_section fb_built="1" fullwidth="on" _builder_version="4.27.4" _module_preset="default" global_colors_info="{}"][et_pb_fullwidth_menu menu_id="163" active_link_color="#6042A8" dropdown_menu_text_color="#ffcccc" mobile_menu_text_color="#ffcccc" cart_icon_color="#ffcccc" search_icon_color="#ffcccc" menu_icon_color="#ffcccc" _builder_version="4.27.4" menu_font="Montserrat|700||on|||||" menu_text_color="#E8EAF1" menu_font_size="12px" background_color="RGBA(255,255,255,0)" background_image="https://excentricofest.com/wp-content/uploads/2025/07/Ideas-pixel2.jpg" background_blend="overlay" text_orientation="right" menu_text_color_tablet="#E6F543" menu_text_color_phone="#E6F543" menu_text_color_last_edited="on|desktop" global_colors_info="{}" menu_text_color__hover_enabled="on|desktop" menu_text_color__hover="#91F580"][/et_pb_fullwidth_menu][/et_pb_section]
+	[et_pb_section fb_built="1" _builder_version="4.27.4" background_color="#6042A8" use_background_color_gradient="on" background_color_gradient_stops="#6042a8 0%|#a598f3 77%|#c6cff5 100%" background_color_gradient_start="#3333cc" background_color_gradient_end="#6633cc"]
+		[et_pb_row column_structure="1_2,1_2" _builder_version="4.27.4" global_colors_info="{}"]	
+			[et_pb_column type="1_2" _builder_version="4.27.4" global_colors_info="{}"]
+				[et_pb_text _builder_version="4.27.4" text_font_size="15px" header_4_font="|600||on|||||" header_4_text_color="#6042A8" header_4_font_size="19px" background_color="#ffffff" max_height_tablet="" max_height_phone="" max_height_last_edited="on|desktop" custom_padding="3%|3%|3.6%|3%|false|false" box_shadow_style="preset3" box_shadow_color="#C6CFF5" global_colors_info="{}"]
+					<h4><strong>FICHA TÉCNICA:</strong></h4>
+					<p><strong>Dirección:</strong> María José Ríos, Alex Ray</p><p><strong>Producción:</strong> Productora Uno</p><p><strong>Guión:</strong> Guionista Dos</p><p><strong>Cámara - Foto:</strong> Fotógrafa Tres</p><p><strong>Arte - Diseño:</strong> Arte Cuatro</p><p><strong>Sonido - Música:</strong> Sonido Cinco</p><p><strong>Edición:</strong> Editor Seis</p><p><strong>Intérpretes (especificar pronombres para subtítulos):</strong> Actriz Siete (ella)</p>
+				[/et_pb_text]
+			[/et_pb_column]
+			[et_pb_column type="1_2" _builder_version="4.27.4" global_colors_info="{}"]
+				[et_pb_text _builder_version="4.27.4" text_font_size="15px" header_4_font="|600||on|||||" header_4_text_color="#6042A8" header_4_font_size="19px" background_color="#ffffff" custom_padding="3%|3%|3.6%|3%|false|false" box_shadow_style="preset3" box_shadow_color="#C6CFF5" global_colors_info="{}"]
+					<h4><strong>SINOPSIS:</strong></h4>
+					<p class="p1">
+						<span data-sheets-root="1">Una película sobre el mar, las olas &amp; la memoria.</span>
+					</p>
+				[/et_pb_text]
+				
+	[et_pb_text disabled_on="off|off|off" _builder_version="4.27.4" _module_preset="default" text_font="|600|||||||" text_text_color="#6042A8" background_color="#A7E4F2" custom_margin="6%||||false|false" custom_padding="1%||1%|2%|false|false" box_shadow_style="preset3" box_shadow_color="#C6CFF5" locked="off" global_colors_info="{}"]
+		<p>
+			<strong>NdC: <span data-sheets-root="1">Desnudez, violencia</span><br />
+			</strong>
+		</p>
+	[/et_pb_text]
+			[/et_pb_column]
+		[/et_pb_row]
+		[et_pb_row column_structure="1_2,1_2" _builder_version="4.27.4" _module_preset="default" global_colors_info="{}"][et_pb_column type="1_2" _builder_version="4.27.4" _module_preset="default" global_colors_info="{}"][et_pb_image src="https://example.com/wp-content/uploads/maria-jose-rios_web.jpg" alt="María José Ríos" title_text="María José Ríos" _builder_version="4.27.4" _module_preset="default" global_colors_info="{}"][/et_pb_image][/et_pb_column][et_pb_column type="1_2" _builder_version="4.27.4" _module_preset="default" global_colors_info="{}"][et_pb_text _builder_version="4.27.4" text_font_size="15px" link_font="|600|||||||" link_text_color="#FF9582" header_4_font="|600||on|||||" header_4_text_color="#6042A8" header_4_font_size="19px" background_color="#ffffff" max_height_tablet="" max_height_phone="" max_height_last_edited="on|desktop" custom_padding="3.3%|3%|3.6%|3%|false|false" box_shadow_style="preset3" box_shadow_color="#C6CFF5" global_colors_info="{}"]<h4><span>María José Ríos</span></h4>
+<p><span data-sheets-root="1">Directora &lt;chilena&gt; de cine &amp; video.</span></p>[/et_pb_text][/et_pb_column][/et_pb_row][et_pb_row column_structure="1_2,1_2" _builder_version="4.27.4" _module_preset="default" global_colors_info="{}"][et_pb_column type="1_2" _builder_version="4.27.4" _module_preset="default" global_colors_info="{}"][et_pb_image src="" alt="Alex Ray" title_text="Alex Ray" _builder_version="4.27.4" _module_preset="default" global_colors_info="{}"][/et_pb_image][/et_pb_column][et_pb_column type="1_2" _builder_version="4.27.4" _module_preset="default" global_colors_info="{}"][et_pb_text _builder_version="4.27.4" text_font_size="15px" link_font="|600|||||||" link_text_color="#FF9582" header_4_font="|600||on|||||" header_4_text_color="#6042A8" header_4_font_size="19px" background_color="#ffffff" max_height_tablet="" max_height_phone="" max_height_last_edited="on|desktop" custom_padding="3.3%|3%|3.6%|3%|false|false" box_shadow_style="preset3" box_shadow_color="#C6CFF5" global_colors_info="{}"]<h4><span>Alex Ray</span></h4>
+<p><span data-sheets-root="1">Artista visual.</span></p>[/et_pb_text][/et_pb_column][/et_pb_row]
+		
+	[et_pb_row _builder_version="4.27.4" global_colors_info="{}"]
+		[et_pb_column type="4_4" _builder_version="4.27.4" global_colors_info="{}"]
+			[et_pb_gallery gallery_ids="101,102,103" fullwidth="on" _builder_version="4.27.4" _module_preset="default" global_colors_info="{}"]
+			[/et_pb_gallery]
+		[/et_pb_column]
+	[/et_pb_row]
+	[/et_pb_section]
+	[et_pb_section fb_built="1" admin_label="Section" _builder_version="4.27.4" background_image="https://excentricofest.com/wp-content/uploads/2025/07/Ideas-pixel2.jpg" background_position="top_center" min_height="294.8px" custom_margin="||||false|false" custom_padding="||||false|false" global_module="12678" saved_tabs="all" global_colors_info="{}"]
+		[et_pb_row disabled_on="off|off|off" _builder_version="4.23.2" _module_preset="default" min_height="164.4px" global_colors_info="{}"]
+			[et_pb_column type="4_4" _builder_version="4.17.4" _module_preset="default" global_colors_info="{}"]
+				[et_pb_button button_url="@ET-DC@eyJkeW5hbWljIjp0cnVlLCJjb250ZW50IjoicG9zdF9saW5rX3VybF9wYWdlIiwic2V0dGluZ3MiOnsicG9zdF9pZCI6IjEwNDI0In19@" button_text="convocatoria 2026" button_alignment="center" disabled_on="on|on|on" module_class="popmake-6500" _builder_version="4.27.4" _dynamic_attributes="button_url" _module_preset="default" custom_button="on" button_text_color="#6042A8" button_bg_color="#E6F543" button_border_color="#A7E4F2" button_font="|600|||||||" button_icon_color="#24A68E" box_shadow_style="preset3" box_shadow_color="#E8EAF1" disabled="on" global_colors_info="{}" button_text_color__hover_enabled="on|desktop" button_text_color__hover="#FFFC4F" button_bg_color__hover_enabled="on|hover" button_bg_color__hover="#FF9582" button_bg_enable_color__hover="on" button_border_color__hover_enabled="on|hover" button_border_color__hover="#FF9582"]
+				[/et_pb_button]
+			[/et_pb_column]
+		[/et_pb_row]
+		[et_pb_row column_structure="1_3,1_3,1_3" _builder_version="4.27.4" global_colors_info="{}"]\
+			[et_pb_column type="1_3" _builder_version="4.27.4" global_colors_info="{}"]
+				[et_pb_social_media_follow icon_color="#24A68E" icon_color_tablet="#FFDBFF" icon_color_phone="#FFDBFF" icon_color_last_edited="on|tablet" _builder_version="4.27.4" background_color="RGBA(255,255,255,0)" custom_button="on" button_text_color="#24A68E" button_bg_color="#E6F543" button_border_color="#E6F543" text_orientation="center" custom_margin="||||false|false" global_colors_info="{}"]
+					[et_pb_social_media_follow_network social_network="facebook" url="https://www.facebook.com/excentrico.fest/" icon_color="#24A68E" _builder_version="4.27.4" background_color="#E6F543" background_enable_color="on" global_colors_info="{}"]
+						facebook
+					[/et_pb_social_media_follow_network]
+					[et_pb_social_media_follow_network social_network="instagram" url="https://www.instagram.com/excentrico.fest/?hl=es" icon_color="#24A68E" _builder_version="4.27.4" background_color="#E6F543" background_enable_color="on" global_colors_info="{}"]
+						instagram
+					[/et_pb_social_media_follow_network]
+					[et_pb_social_media_follow_network social_network="twitter" url="https://twitter.com/excentricofest" icon_color="#24A68E" _builder_version="4.27.4" background_color="#E6F543" background_enable_color="on" global_colors_info="{}"]
+						twitter
+					[/et_pb_social_media_follow_network]
+				[/et_pb_social_media_follow]
+			[/et_pb_column]
+			[et_pb_column type="1_3" _builder_version="4.27.4" global_colors_info="{}"]
+				[et_pb_text _builder_version="4.27.4" text_text_color="#FFFC4F" link_font="|600|||||||" link_text_color="#31045C" header_text_color="#31045C" text_orientation="center" text_text_align="center" global_colors_info="{}" link_text_color__hover_enabled="on|desktop"]
+					<p><span style="color: #31045C;"><strong><a href="mailto:hola@excentricofest.com" target="_blank" rel="noopener noreferrer" style="color: #31045C;">hola@excentricofest.com</a></strong></span></p>
+				[/et_pb_text]
+			[/et_pb_column]
+			[et_pb_column type="1_3" _builder_version="4.27.4" global_colors_info="{}"]
+				[et_pb_search button_color="#24A68E" placeholder_color="#24A68E" _builder_version="4.27.4" form_field_background_color="RGBA(255,255,255,0)" form_field_text_color="#31045C" form_field_focus_background_color="RGBA(255,255,255,0)" form_field_focus_text_color="#31045C" button_font="|800|||||||" button_text_color="#E6F543" button_font_size="12px" form_field_font_size="12px" background_color="rgba(0,0,0,0)" background_last_edited="on|phone" border_width_all="3px" border_color_all="#24A68E" global_colors_info="{}" background__hover_enabled="on|desktop"]
+				[/et_pb_search]
+			[/et_pb_column]
+		[/et_pb_row]
+	[/et_pb_section]
