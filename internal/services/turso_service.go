@@ -1,13 +1,14 @@
 package services
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 
 	"excentrico-tools-go/internal/config"
+	"excentrico-tools-go/internal/debug"
 
 	_ "github.com/tursodatabase/libsql-client-go/libsql"
 )
@@ -37,7 +38,6 @@ func NewTursoService(cfg config.TursoConfig) (*TursoService, error) {
 		return nil, fmt.Errorf("failed to initialize database tables: %v", err)
 	}
 
-	log.Printf("Successfully connected to Turso database")
 	return service, nil
 }
 
@@ -82,7 +82,7 @@ func (s *TursoService) SaveMetadata(filmID, metadataType string, data interface{
 		return fmt.Errorf("failed to save metadata: %v", err)
 	}
 
-	log.Printf("Saved metadata for film '%s' (type: %s)", filmID, metadataType)
+	debug.Printf("Saved metadata for film '%s' (type: %s)", filmID, metadataType)
 	return nil
 }
 
@@ -102,6 +102,14 @@ func (s *TursoService) GetMetadata(filmID, metadataType string, dest interface{}
 		return fmt.Errorf("failed to unmarshal JSON data: %v", err)
 	}
 
+	return nil
+}
+
+// Ping checks that the database is reachable.
+func (s *TursoService) Ping(ctx context.Context) error {
+	if err := s.db.PingContext(ctx); err != nil {
+		return fmt.Errorf("turso ping: %w", err)
+	}
 	return nil
 }
 

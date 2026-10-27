@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -49,7 +48,7 @@ func ListAllFilesRecursivelyWithPath(ctx context.Context, driveService *services
 
 			subFiles, err := ListAllFilesRecursivelyWithPath(ctx, driveService, item.Id, newPath)
 			if err != nil {
-				log.Printf("Warning: Failed to list files in subfolder '%s': %v", item.Name, err)
+				logger.Get().Warnf("list_drive_files", "Failed to list files in subfolder '%s': %v", item.Name, err)
 				continue
 			}
 			debug.Printf("Found %d files in subfolder '%s'", len(subFiles), item.Name)

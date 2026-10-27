@@ -52,12 +52,12 @@ Ground rule for every step: `go build ./... && go vet ./... && go test ./...` mu
 
 ### Step 4 — Logging and CLI (PR: "feat: CLI flags and sane logger defaults")
 
-- [ ] 4.1 `logger.go:94` default `sampleRate` 1.0; add `OperationTracker.Important()` bypassing sampling; mark `process_single_film`, `create_wordpress_post`, `update_wordpress_post`.
-- [ ] 4.2 JSON events → log file only; new `logger.Progress()` to stderr; `[i/N] "<title>" → post #<id>, <n> images` lines in `processFilteredObjects`.
-- [ ] 4.3 Remove the `op.Fail` + `log.Fatalf` duplicates and repeated `process_films` trackers in `main.go`; introduce `func run() error` with a single exit path.
-- [ ] 4.4 Flags: `-non-interactive`, `-film "<title>"`, `-dry-run`, `-check` (wires existing `TestConnection` + Turso ping + sheet header read), `-template <path>` (from 1.3).
-- [ ] 4.5 Replace stray `log.Printf`/`fmt.Printf` in services with tracker events.
-- [ ] 4.6 Verify: run with `-non-interactive -year 2026 -dry-run`; terminal shows only progress lines; log file contains one `process_single_film` per film.
+- [x] 4.1 `logger.go:94` default `sampleRate` 1.0; add `OperationTracker.Important()` bypassing sampling; mark `process_single_film`, `create_wordpress_post`, `update_wordpress_post`.
+- [x] 4.2 JSON events → log file only; new `logger.Progress()` to stderr; `[i/N] "<title>" → post #<id>, <n> images` lines in `processFilteredObjects`.
+- [x] 4.3 Remove the `op.Fail` + `log.Fatalf` duplicates and repeated `process_films` trackers in `main.go`; introduce `func run() error` with a single exit path.
+- [x] 4.4 Flags: `-non-interactive`, `-film "<title>"`, `-dry-run`, `-check` (wires existing `TestConnection` + Turso ping + sheet header read), `-template <path>` (from 1.3).
+- [x] 4.5 Replace stray `log.Printf`/`fmt.Printf` in services with tracker events.
+- [~] 4.6 Verify: run with `-non-interactive -year 2026 -dry-run`; terminal shows only progress lines; log file contains one `process_single_film` per film. (Partially verified: live run prints only progress lines, stdout empty, events only in the log file; the sheet read returns 403 for the configured service account — same on `main` — so per-film lines were verified by unit test only. Re-run once sheet access is granted.)
 
 ### Step 5 — Structure: schema package and interfaces (PR: "refactor: sheet package and consumer interfaces")
 

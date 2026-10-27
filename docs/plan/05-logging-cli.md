@@ -42,3 +42,25 @@ and repeated `process_films` trackers are removed.
 
 `log.Printf` / `fmt.Printf` calls inside services are replaced by tracker
 events, so the terminal only shows progress.
+
+## Details decided during implementation
+
+- `-embed-images` lands with plan Step 6.5 and `-version` with Step 8.3; the
+  table above is the end state.
+- `debug.Printf` writes `"level":"debug"` events to the log file (not the
+  terminal); `-debug` only controls whether they are recorded.
+- Exactly one `process_single_film` event per film: the duplicate tracker in
+  `app` and the wrapper trackers in `film.Processor` (which repeated the
+  `process_drive_files` / `upload_wordpress_media` /
+  `create_update_wordpress_project` events already emitted by the called
+  functions) are removed. A caption error is logged as `build_caption`.
+- `CreateOrUpdateWordPressProject` returns the post ID and
+  `ProcessSingleFilm` returns `{PostID, Images}` for the progress line.
+- Exit code: failed films are reported (`[i/N] "<title>" → FAILED: ...` and
+  a final `Done:` line) but, as before, do not make the run exit non-zero.
+- Sheet rows: an empty header cell no longer shifts the following columns
+  (previously nil headers were dropped, misaligning later values).
+- `-check` uses `TestConnection` (now returns the user name instead of
+  printing), a new `TursoService.Ping`, and reads row 1 of the `TODO` tab.
+- `-non-interactive` skips the menu, year and WordPress menu prompts; the
+  configuration menu refuses to run with it.
