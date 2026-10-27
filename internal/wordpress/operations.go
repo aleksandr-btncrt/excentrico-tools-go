@@ -1,6 +1,8 @@
 package wordpress
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -86,7 +88,7 @@ func normalizeDirectorCacheKey(name string) string {
 
 // UploadMediaToWordPress uploads optimized images to WordPress. Director images (under a "Dir" folder)
 // are uploaded with the director name as title and deduplicated via cache and WordPress search.
-func UploadMediaToWordPress(wordpressService *services.WordPressService, tursoService *services.TursoService, filmDir string, filmTitle string, filmData map[string]any) ([]int, error) {
+func UploadMediaToWordPress(ctx context.Context, wordpressService *services.WordPressService, tursoService *services.TursoService, filmDir string, filmTitle string, filmData map[string]any) ([]int, error) {
 	l := logger.Get()
 	op := l.StartOperation("upload_wordpress_media")
 	
@@ -97,7 +99,7 @@ func UploadMediaToWordPress(wordpressService *services.WordPressService, tursoSe
 	metadata := &models.WordPressMetadata{}
 	err := tursoService.GetWordPressMetadata(filmID, metadata)
 	if err != nil {
-		if strings.Contains(err.Error(), "metadata not found") {
+		if errors.Is(err, services.ErrMetadataNotFound) {
 			op.WithContext("existing_metadata", false)
 			metadata = nil
 		} else {
@@ -141,14 +143,14 @@ func UploadMediaToWordPress(wordpressService *services.WordPressService, tursoSe
 	directorNames := parseDirectorNames(filmData)
 
 	directorCache := make(map[string]services.DirectorMediaCacheEntry)
-	if getCacheErr := tursoService.GetDirectorMediaCache(&directorCache); getCacheErr != nil && !strings.Contains(getCacheErr.Error(), "metadata not found") {
+	if getCacheErr := tursoService.GetDirectorMediaCache(&directorCache); getCacheErr != nil && !errors.Is(getCacheErr, services.ErrMetadataNotFound) {
 		log.Printf("Failed to load director media cache: %v", getCacheErr)
 	}
 
 	existingImageMetadata := make(map[string]int)
 	err = tursoService.GetWPImagesMetadata(filmID, &existingImageMetadata)
 	if err != nil {
-		if strings.Contains(err.Error(), "metadata not found") {
+		if errors.Is(err, services.ErrMetadataNotFound) {
 			log.Printf("No existing image metadata found for '%s', will start fresh", filmTitle)
 		} else {
 			log.Printf("Failed to load existing image metadata: %v", err)
@@ -204,7 +206,7 @@ func UploadMediaToWordPress(wordpressService *services.WordPressService, tursoSe
 				log.Printf("Using cached director image for '%s' (ID: %d)", directorName, mediaID)
 			} else {
 				// 2) Search WordPress for existing media with this director name
-				searchResults, searchErr := wordpressService.SearchMedia(directorName)
+				searchResults, searchErr := wordpressService.SearchMedia(ctx, directorName)
 				if searchErr == nil && len(searchResults) > 0 {
 					// Prefer exact title match
 					for _, m := range searchResults {
@@ -230,7 +232,7 @@ func UploadMediaToWordPress(wordpressService *services.WordPressService, tursoSe
 				}
 				// 3) If not in WP, upload with director name as title
 				if mediaID == 0 {
-					media, err = wordpressService.UploadMediaFromFile(webFile, directorName, "Director: "+directorName)
+					media, err = wordpressService.UploadMediaFromFile(ctx, webFile, directorName, "Director: "+directorName)
 					if err != nil {
 						uploadOp := l.StartOperation("upload_single_media")
 						uploadOp.WithFilm(filmID, filmTitle, "", "")
@@ -280,7 +282,7 @@ func UploadMediaToWordPress(wordpressService *services.WordPressService, tursoSe
 		uploadOp.WithContext("file_name", fileName)
 		uploadOp.WithContext("file_path", webFile)
 
-		media, err = wordpressService.UploadMediaFromFile(webFile, title, altText)
+		media, err = wordpressService.UploadMediaFromFile(ctx, webFile, title, altText)
 		if err != nil {
 			uploadOp.Fail(fmt.Sprintf("Failed to upload media %s", fileName), err)
 			failedUploads++
@@ -330,7 +332,7 @@ func UploadMediaToWordPress(wordpressService *services.WordPressService, tursoSe
 }
 
 // CreateOrUpdateWordPressProject creates or updates a WordPress project
-func CreateOrUpdateWordPressProject(wordpressService *services.WordPressService, diviTemplateService *services.DiviTemplateService, tursoService *services.TursoService, filmDir string, filmData map[string]any, year string, imageIds []int, templateConfig services.TemplateData) error {
+func CreateOrUpdateWordPressProject(ctx context.Context, wordpressService *services.WordPressService, diviTemplateService *services.DiviTemplateService, tursoService *services.TursoService, filmDir string, filmData map[string]any, year string, imageIds []int, templateConfig services.TemplateData) error {
 	l := logger.Get()
 	op := l.StartOperation("create_update_wordpress_project")
 	
@@ -351,7 +353,7 @@ func CreateOrUpdateWordPressProject(wordpressService *services.WordPressService,
 	existingMetadata := &models.WordPressMetadata{}
 	err := tursoService.GetWordPressMetadata(filmID, existingMetadata)
 	if err != nil {
-		if strings.Contains(err.Error(), "metadata not found") {
+		if errors.Is(err, services.ErrMetadataNotFound) {
 			op.WithContext("existing_metadata", false)
 			metadata = nil
 		} else {
@@ -382,14 +384,14 @@ func CreateOrUpdateWordPressProject(wordpressService *services.WordPressService,
 
 	filmDataStruct := ConvertObjToFilmData(filmData)
 
-	_, _ = diviTemplateService.GenerateCompleteTemplate(filmDataStruct, imageIds, wordpressService, tursoService, filmID, year, templateConfig)
+	_, _ = diviTemplateService.GenerateCompleteTemplate(ctx, filmDataStruct, imageIds, wordpressService, tursoService, filmID, year, templateConfig)
 
 	var categoryIDs []int
 	if filmDataStruct.Seccion != "" {
 		categoryNames := services.ParseCategoryString(filmDataStruct.Seccion)
 		if len(categoryNames) > 0 {
 			var err error
-			categoryIDs, err = wordpressService.GetCategoryIDsByNames(year, categoryNames)
+			categoryIDs, err = wordpressService.GetCategoryIDsByNames(ctx, year, categoryNames)
 			if err != nil {
 				op.Warn(&logger.WideEvent{
 					Message: fmt.Sprintf("Failed to get category IDs for film '%s'", filmTitle),
@@ -412,7 +414,7 @@ func CreateOrUpdateWordPressProject(wordpressService *services.WordPressService,
 
 	// Try to set a featured image from the uploaded media
 	if len(imageIds) > 0 {
-		if featuredID := selectFeaturedMediaID(imageIds, wordpressService); featuredID > 0 {
+		if featuredID := selectFeaturedMediaID(ctx, imageIds, wordpressService); featuredID > 0 {
 			post.FeaturedMedia = featuredID
 		}
 	}
@@ -422,7 +424,7 @@ func CreateOrUpdateWordPressProject(wordpressService *services.WordPressService,
 		createOp.WithFilm(filmID, filmTitle, year, section)
 		createOp.WithContext("slug", CreateWordPressSlug(slugText))
 
-		createdPost, err := wordpressService.CreatePost(post)
+		createdPost, err := wordpressService.CreatePost(ctx, post)
 		if err != nil {
 			createOp.Fail("Failed to create WordPress post", err)
 			return fmt.Errorf("failed to create WordPress post: %v", err)
@@ -445,7 +447,7 @@ func CreateOrUpdateWordPressProject(wordpressService *services.WordPressService,
 		updateOp.WithWordPress(metadata.PostID, 0, metadata.Slug)
 
 		post.ID = metadata.PostID
-		updatedPost, err := wordpressService.UpdatePost(metadata.PostID, post)
+		updatedPost, err := wordpressService.UpdatePost(ctx, metadata.PostID, post)
 		if err != nil {
 			updateOp.Fail("Failed to update WordPress post", err)
 			return fmt.Errorf("failed to update WordPress post: %v", err)
@@ -473,7 +475,7 @@ func CreateOrUpdateWordPressProject(wordpressService *services.WordPressService,
 		// Don't return error here as this is not critical
 	}
 
-	if err := diviTemplateService.SaveDiviTemplateToFile(filmDataStruct, imageIds, wordpressService, tursoService, filmID, filmDir, year, metadata.PostID, templateConfig ); err != nil {
+	if err := diviTemplateService.SaveDiviTemplateToFile(ctx, filmDataStruct, imageIds, wordpressService, tursoService, filmID, filmDir, year, metadata.PostID, templateConfig ); err != nil {
 		op.Fail("Failed to save Divi template to file", err)
 		return fmt.Errorf("failed to save Divi template to file: %v", err)
 	}
@@ -486,7 +488,7 @@ func CreateOrUpdateWordPressProject(wordpressService *services.WordPressService,
 // selectFeaturedMediaID attempts to pick the most suitable featured image ID
 // Preference order by media title/filename/alt text contains: poster, portada, cover
 // Fallbacks to the first available image ID
-func selectFeaturedMediaID(imageIds []int, wordpressService *services.WordPressService) int {
+func selectFeaturedMediaID(ctx context.Context, imageIds []int, wordpressService *services.WordPressService) int {
 	if wordpressService == nil || len(imageIds) == 0 {
 		return 0
 	}
@@ -495,7 +497,7 @@ func selectFeaturedMediaID(imageIds []int, wordpressService *services.WordPressS
 
 	// First pass: try to match preferred keywords
 	for _, id := range imageIds {
-		media, err := wordpressService.GetMedia(id)
+		media, err := wordpressService.GetMedia(ctx, id)
 		if err != nil {
 			continue
 		}
@@ -531,7 +533,7 @@ func updateMediaMetadataWithPostID(tursoService *services.TursoService, filmID s
 	var mediaMetadata []models.MediaInfo
 	err := tursoService.GetMetadata(filmID, "wordpress_media", &mediaMetadata)
 	if err != nil {
-		if strings.Contains(err.Error(), "metadata not found") {
+		if errors.Is(err, services.ErrMetadataNotFound) {
 			// No media metadata to update
 			return nil
 		}

@@ -1,6 +1,7 @@
 package film
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -41,7 +42,7 @@ func NewProcessor(
 
 // ProcessSingleFilm processes a single film from the Google Sheet data.
 // caption is written to <filmDir>/metadata.json as {"caption": ...}.
-func (p *Processor) ProcessSingleFilm(obj map[string]any, baseDir string, year string, filmName string, caption string, templateConfig services.TemplateData) error {
+func (p *Processor) ProcessSingleFilm(ctx context.Context, obj map[string]any, baseDir string, year string, filmName string, caption string, templateConfig services.TemplateData) error {
 	l := logger.Get()
 	op := l.StartOperation("process_single_film")
 	
@@ -72,7 +73,7 @@ func (p *Processor) ProcessSingleFilm(obj map[string]any, baseDir string, year s
 			driveOp.WithFilm(filmID, filmName, year, filmSection)
 			driveOp.WithContext("enlaces_url", enlacesStr)
 			
-			if err := drive.ProcessGoogleDriveFiles(filmDir, p.driveService, p.imageService, p.tursoService, filmName, enlacesStr); err != nil {
+			if err := drive.ProcessGoogleDriveFiles(ctx, filmDir, p.driveService, p.imageService, p.tursoService, filmName, enlacesStr); err != nil {
 				driveOp.Fail("Failed to process Google Drive files", err)
 				return fmt.Errorf("failed to process Google Drive files: %v", err)
 			}
@@ -96,7 +97,7 @@ func (p *Processor) ProcessSingleFilm(obj map[string]any, baseDir string, year s
 	wpOp := l.StartOperation("upload_wordpress_media")
 	wpOp.WithFilm(filmID, filmName, year, filmSection)
 	
-	imageIds, err := wordpress.UploadMediaToWordPress(p.wordpressService, p.tursoService, filmDir, filmName, obj)
+	imageIds, err := wordpress.UploadMediaToWordPress(ctx, p.wordpressService, p.tursoService, filmDir, filmName, obj)
 	if err != nil {
 		wpOp.Fail("Failed to upload media to WordPress", err)
 		return fmt.Errorf("failed to upload media to WordPress: %v", err)
@@ -109,7 +110,7 @@ func (p *Processor) ProcessSingleFilm(obj map[string]any, baseDir string, year s
 	projectOp.WithFilm(filmID, filmName, year, filmSection)
 	projectOp.WithContext("image_count", len(imageIds))
 	
-	if err := wordpress.CreateOrUpdateWordPressProject(p.wordpressService, p.diviTemplateService, p.tursoService, filmDir, obj, year, imageIds, templateConfig); err != nil {
+	if err := wordpress.CreateOrUpdateWordPressProject(ctx, p.wordpressService, p.diviTemplateService, p.tursoService, filmDir, obj, year, imageIds, templateConfig); err != nil {
 		projectOp.Fail("Failed to create/update WordPress project", err)
 		return fmt.Errorf("failed to create/update WordPress project: %v", err)
 	}

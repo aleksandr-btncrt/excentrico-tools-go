@@ -41,14 +41,14 @@ Ground rule for every step: `go build ./... && go vet ./... && go test ./...` mu
 
 ### Step 3 — Security and robustness (PR: "chore: remove credential logging, add timeouts, sentinel errors")
 
-- [ ] 3.1 Delete auth-header output at `wordpress.go:122` and `:687`. Add a test asserting the base64 auth string never reaches debug output.
-- [ ] 3.2 `makeRequest` (`wordpress.go:668-672`): log payload size always, payload body only when `debug.IsEnabled()`; truncate `http_response_body` to 2 KB.
-- [ ] 3.3 `http.Client{Timeout: 120s}`; replace `http.Get` in `downloadAndEncodeImage` with a `WordPressService.Download` method on the same client.
-- [ ] 3.4 Thread `context.Context` from `main` (with `signal.NotifyContext`) through `App.ProcessFilms` → `ProcessSingleFilm` → drive/wordpress ops; use `NewRequestWithContext`.
-- [ ] 3.5 `turso_service.go`: `ErrMetadataNotFound` sentinel wrapped with `%w`; replace the six `strings.Contains` checks with `errors.Is`.
-- [ ] 3.6 `app.go:117`: return error instead of `log.Fatal`; move the `google_sheet_id` required check into `config.Load()`.
-- [ ] 3.7 `main.go` prompts: `bufio.Scanner` helper; handle EOF/piped stdin.
-- [ ] 3.8 Check errors from `writer.WriteField` (`wordpress.go:309,313,400,404`).
+- [x] 3.1 Delete auth-header output at `wordpress.go:122` and `:687`. Add a test asserting the base64 auth string never reaches debug output.
+- [x] 3.2 `makeRequest` (`wordpress.go:668-672`): log payload size always, payload body only when `debug.IsEnabled()`; truncate `http_response_body` to 2 KB.
+- [x] 3.3 `http.Client{Timeout: 120s}`; replace `http.Get` in `downloadAndEncodeImage` with a `WordPressService.Download` method on the same client.
+- [x] 3.4 Thread `context.Context` from `main` (with `signal.NotifyContext`) through `App.ProcessFilms` → `ProcessSingleFilm` → drive/wordpress ops; use `NewRequestWithContext`.
+- [x] 3.5 `turso_service.go`: `ErrMetadataNotFound` sentinel wrapped with `%w`; replace the six `strings.Contains` checks with `errors.Is`.
+- [x] 3.6 `app.go:117`: return error instead of `log.Fatal`; move the `google_sheet_id` required check into `config.Load()`.
+- [x] 3.7 `main.go` prompts: `bufio.Scanner` helper; handle EOF/piped stdin.
+- [x] 3.8 Check errors from `writer.WriteField` (`wordpress.go:309,313,400,404`).
 
 ### Step 4 — Logging and CLI (PR: "feat: CLI flags and sane logger defaults")
 

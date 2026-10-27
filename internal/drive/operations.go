@@ -1,6 +1,8 @@
 package drive
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -15,17 +17,17 @@ import (
 )
 
 // ListAllFilesRecursively lists all files in a folder and its subfolders
-func ListAllFilesRecursively(driveService *services.GoogleDriveService, folderID string) ([]*models.FileWithPath, error) {
-	return ListAllFilesRecursivelyWithPath(driveService, folderID, "")
+func ListAllFilesRecursively(ctx context.Context, driveService *services.GoogleDriveService, folderID string) ([]*models.FileWithPath, error) {
+	return ListAllFilesRecursivelyWithPath(ctx, driveService, folderID, "")
 }
 
 // ListAllFilesRecursivelyWithPath lists all files recursively with the current path context
-func ListAllFilesRecursivelyWithPath(driveService *services.GoogleDriveService, folderID string, currentPath string) ([]*models.FileWithPath, error) {
+func ListAllFilesRecursivelyWithPath(ctx context.Context, driveService *services.GoogleDriveService, folderID string, currentPath string) ([]*models.FileWithPath, error) {
 	var allFiles []*models.FileWithPath
 
 	debug.Printf("Listing contents of folder ID: %s (path: %s)", folderID, currentPath)
 
-	items, err := driveService.ListFiles(folderID)
+	items, err := driveService.ListFiles(ctx, folderID)
 	if err != nil {
 		debug.Printf("Error listing folder %s: %v", folderID, err)
 		return nil, err
@@ -45,7 +47,7 @@ func ListAllFilesRecursivelyWithPath(driveService *services.GoogleDriveService, 
 				newPath = currentPath + "/" + item.Name
 			}
 
-			subFiles, err := ListAllFilesRecursivelyWithPath(driveService, item.Id, newPath)
+			subFiles, err := ListAllFilesRecursivelyWithPath(ctx, driveService, item.Id, newPath)
 			if err != nil {
 				log.Printf("Warning: Failed to list files in subfolder '%s': %v", item.Name, err)
 				continue
@@ -80,13 +82,13 @@ func ListAllFilesRecursivelyWithPath(driveService *services.GoogleDriveService, 
 }
 
 // DownloadFile downloads a file from Google Drive to the specified destination
-func DownloadFile(driveService *services.GoogleDriveService, fileID, destinationPath string) error {
+func DownloadFile(ctx context.Context, driveService *services.GoogleDriveService, fileID, destinationPath string) error {
 	l := logger.Get()
 	op := l.StartOperation("download_drive_file")
 	op.WithDrive("", fileID, filepath.Base(destinationPath))
 	op.WithContext("destination_path", destinationPath)
 
-	err := driveService.DownloadFile(fileID, destinationPath)
+	err := driveService.DownloadFile(ctx, fileID, destinationPath)
 	if err != nil {
 		op.Fail("Failed to download file from Drive", err)
 		return fmt.Errorf("download failed: %v", err)
@@ -117,7 +119,7 @@ func isAllowedFolder(folderName string) bool {
 }
 
 // ProcessGoogleDriveFiles processes all files from a Google Drive folder
-func ProcessGoogleDriveFiles(filmDir string, driveService *services.GoogleDriveService, imageService *services.ImageService, tursoService *services.TursoService, filmName string, enlacesStr string) error {
+func ProcessGoogleDriveFiles(ctx context.Context, filmDir string, driveService *services.GoogleDriveService, imageService *services.ImageService, tursoService *services.TursoService, filmName string, enlacesStr string) error {
 	l := logger.Get()
 	op := l.StartOperation("process_drive_files")
 	
@@ -134,7 +136,7 @@ func ProcessGoogleDriveFiles(filmDir string, driveService *services.GoogleDriveS
 
 	op.WithDrive(folderID, "", "")
 
-	allFiles, err := ListAllFilesRecursively(driveService, folderID)
+	allFiles, err := ListAllFilesRecursively(ctx, driveService, folderID)
 	if err != nil {
 		op.Fail("Failed to list files recursively in folder", err)
 		return fmt.Errorf("failed to list files recursively in folder: %v", err)
@@ -177,7 +179,7 @@ func ProcessGoogleDriveFiles(filmDir string, driveService *services.GoogleDriveS
 
 	err = tursoService.GetDriveFilesMetadata(filmID, &existingFiles)
 	if err != nil {
-		if strings.Contains(err.Error(), "metadata not found") {
+		if errors.Is(err, services.ErrMetadataNotFound) {
 			op.WithContext("existing_metadata", false)
 		} else {
 			op.Warn(&logger.WideEvent{
@@ -250,7 +252,7 @@ func ProcessGoogleDriveFiles(filmDir string, driveService *services.GoogleDriveS
 		downloadOp.WithContext("mime_type", fileInfo.MimeType)
 		downloadOp.WithContext("file_path", filePath)
 		
-		if err := DownloadFile(driveService, fileInfo.ID, filePath); err != nil {
+		if err := DownloadFile(ctx, driveService, fileInfo.ID, filePath); err != nil {
 			downloadOp.Fail(fmt.Sprintf("Failed to download %s", fileInfo.Name), err)
 			failedDownloads++
 			continue

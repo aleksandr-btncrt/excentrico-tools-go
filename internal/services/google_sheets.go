@@ -56,14 +56,14 @@ func NewGoogleSheetsService(ctx context.Context, credentialsPath string, driveSe
 // file is actually an .xlsx document stored in Drive (which the Sheets API
 // cannot read - see issue #1), it downloads the file via Drive and parses
 // it locally instead.
-func (s *GoogleSheetsService) ReadRange(spreadsheetID, rangeStr string) ([][]interface{}, error) {
+func (s *GoogleSheetsService) ReadRange(ctx context.Context, spreadsheetID, rangeStr string) ([][]interface{}, error) {
 	if s.driveService != nil {
-		if file, err := s.driveService.GetFileMetadata(spreadsheetID); err == nil && file.MimeType == xlsxMimeType {
-			return s.readRangeFromXLSX(spreadsheetID, rangeStr)
+		if file, err := s.driveService.GetFileMetadata(ctx, spreadsheetID); err == nil && file.MimeType == xlsxMimeType {
+			return s.readRangeFromXLSX(ctx, spreadsheetID, rangeStr)
 		}
 	}
 
-	resp, err := s.service.Spreadsheets.Values.Get(spreadsheetID, rangeStr).Do()
+	resp, err := s.service.Spreadsheets.Values.Get(spreadsheetID, rangeStr).Context(ctx).Do()
 	if err != nil {
 		return nil, fmt.Errorf("failed to read range: %v", err)
 	}
@@ -73,8 +73,8 @@ func (s *GoogleSheetsService) ReadRange(spreadsheetID, rangeStr string) ([][]int
 
 // readRangeFromXLSX downloads the file identified by fileID from Drive and
 // parses it locally as an xlsx document.
-func (s *GoogleSheetsService) readRangeFromXLSX(fileID, rangeStr string) ([][]interface{}, error) {
-	data, err := s.driveService.DownloadFileBytes(fileID)
+func (s *GoogleSheetsService) readRangeFromXLSX(ctx context.Context, fileID, rangeStr string) ([][]interface{}, error) {
+	data, err := s.driveService.DownloadFileBytes(ctx, fileID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to download xlsx file: %v", err)
 	}
