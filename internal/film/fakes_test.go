@@ -97,12 +97,14 @@ func (r *fakeResizer) ResizeImage(inputPath, outputPath string) error {
 
 // fakeWordPress keeps media and posts in memory and records every call.
 type fakeWordPress struct {
-	nextID  int
-	media   map[int]*services.WordPressMedia
-	posts   map[int]*services.WordPressPost
-	uploads []string // titles of uploaded media
-	creates int
-	updates []int // post IDs passed to UpdatePost
+	nextID    int
+	media     map[int]*services.WordPressMedia
+	posts     map[int]*services.WordPressPost
+	uploads   []string // titles of uploaded media
+	creates   int
+	updates   []int // post IDs passed to UpdatePost
+	fetches   int   // FetchMedia calls
+	downloads int   // Download calls
 }
 
 func newFakeWordPress() *fakeWordPress {
@@ -115,15 +117,21 @@ func newFakeWordPress() *fakeWordPress {
 
 func (w *fakeWordPress) id() int { w.nextID++; return w.nextID }
 
-func (w *fakeWordPress) GetMedia(_ context.Context, id int) (*services.WordPressMedia, error) {
-	m, ok := w.media[id]
-	if !ok {
-		return nil, fmt.Errorf("media %d not found", id)
+// FetchMedia returns the known media among ids (unknown IDs are left out,
+// like the real batched lookup). Each call is counted in fetches.
+func (w *fakeWordPress) FetchMedia(_ context.Context, ids []int) (*services.MediaCache, error) {
+	w.fetches++
+	var items []*services.WordPressMedia
+	for _, id := range ids {
+		if m, ok := w.media[id]; ok {
+			items = append(items, m)
+		}
 	}
-	return m, nil
+	return services.NewMediaCache(items), nil
 }
 
 func (w *fakeWordPress) Download(_ context.Context, url string) ([]byte, error) {
+	w.downloads++
 	return []byte("image:" + url), nil
 }
 

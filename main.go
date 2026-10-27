@@ -36,6 +36,7 @@ type RuntimeOptions struct {
 	NonInteractive bool
 	DryRun         bool
 	Check          bool
+	EmbedImages    bool
 }
 
 func main() {
@@ -59,6 +60,10 @@ func run() error {
 	nonInteractiveFlag := flag.Bool("non-interactive", false, "Never prompt; use flags and defaults")
 	dryRunFlag := flag.Bool("dry-run", false, "Read the sheet and report what would be processed; no downloads, uploads or writes")
 	checkFlag := flag.Bool("check", false, "Check WordPress auth, Turso connectivity and the sheet header row, then exit")
+	// Default stays on (the current, Divi-import-validated behaviour) until an
+	// import without embedded images has been checked; see
+	// docs/plan/03-performance.md.
+	embedImagesFlag := flag.Bool("embed-images", true, "Embed images as base64 in divi_template.json (use -embed-images=false for URL-only, much smaller files)")
 	flag.Parse()
 
 	logger.Init("excentrico-tools-go")
@@ -102,6 +107,7 @@ func run() error {
 		NonInteractive: *nonInteractiveFlag,
 		DryRun:         *dryRunFlag,
 		Check:          *checkFlag,
+		EmbedImages:    *embedImagesFlag,
 	}
 
 	if runtime.Menu == "" {
@@ -157,6 +163,7 @@ func run() error {
 	}
 	op.Complete("Application initialized successfully")
 	defer application.Close()
+	application.SetEmbedImages(runtime.EmbedImages)
 
 	// Pick the WordPress navigation menu (from -menu-slug or interactively).
 	// The chosen menu's ID overrides menu.menu_id from the template; with no

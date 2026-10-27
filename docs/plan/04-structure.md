@@ -34,7 +34,7 @@ Implementation notes (Step 5):
 
 - The narrow interfaces are `drive.Client`, `drive.Resizer`,
   `wordpress.Client` and `services.MediaClient` (what Divi generation needs:
-  `GetMedia` + `Download`); `services.MetadataStore` has `SaveMetadata` /
+  `FetchMedia` + `Download` since Step 6); `services.MetadataStore` has `SaveMetadata` /
   `GetMetadata`. Compile-time assertions tie each to its concrete service.
 - `sheet.Film.Title()` is the film identity everywhere. Previously an
   untitled row used `"Untitled Film"` in the post step and `"unnamed_film"`

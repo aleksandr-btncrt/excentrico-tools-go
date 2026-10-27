@@ -70,13 +70,13 @@ Ground rule for every step: `go build ./... && go vet ./... && go test ./...` mu
 
 ### Step 6 — Performance (PR: "perf: media cache and single template generation")
 
-- [ ] 6.1 `internal/services/media_cache.go`: `FetchMedia(ids) (*MediaCache, error)` using `?include=`, chunked by 100, following `X-WP-TotalPages`; add to `WordPressClient` interface.
-- [ ] 6.2 Build the cache once in `CreateOrUpdateWordPressProject`; pass it into `findDirectorImage`, `selectBackgroundImageURL`, `selectFeaturedMediaID`, `fetchWordPressImagesData`.
-- [ ] 6.3 Generate the template once; `SaveDiviTemplateToFile(shortcodes, cache, filmDir, postID)`; delete the discarded call at `wordpress/operations.go:392`.
-- [ ] 6.4 `mediaFilenameStem()` helper replacing the three copies of URL→filename logic.
-- [ ] 6.5 `-embed-images` flag (default off → `encoded: ""`). Validate against one real Divi import before changing the default; note the result in `docs/plan/03-performance.md`.
-- [ ] 6.6 `httptest` test for `FetchMedia` chunking/pagination.
-- [ ] 6.7 Verify: count `/wp/v2/media` requests in a run log — ≤ 5 per film.
+- [x] 6.1 `internal/services/media_cache.go`: `FetchMedia(ids) (*MediaCache, error)` using `?include=`, chunked by 100, following `X-WP-TotalPages`; add to `WordPressClient` interface.
+- [x] 6.2 Build the cache once in `CreateOrUpdateWordPressProject`; pass it into `findDirectorImage`, `selectBackgroundImageURL`, `selectFeaturedMediaID`, `fetchWordPressImagesData`.
+- [x] 6.3 Generate the template once; `SaveDiviTemplateToFile(shortcodes, cache, filmDir, postID)`; delete the discarded call at `wordpress/operations.go:392`.
+- [x] 6.4 `mediaFilenameStem()` helper replacing the three copies of URL→filename logic.
+- [~] 6.5 `-embed-images` flag (default off → `encoded: ""`). Validate against one real Divi import before changing the default; note the result in `docs/plan/03-performance.md`. (Partially done: flag and `EmbedImages` implemented and tested; default kept **on** because the Divi import has not been validated — see `docs/plan/03-performance.md` 3.4.)
+- [x] 6.6 `httptest` test for `FetchMedia` chunking/pagination.
+- [~] 6.7 Verify: count `/wp/v2/media` requests in a run log — ≤ 5 per film. (Verified offline: `TestCreateOrUpdate_MediaRequestBudget` — 3 directors / 20 images → 1 media request. Live run-log count pending: sheet read returns 403 for the configured service account, same on `main`.)
 
 ### Step 7 — Structure: split and template-ise Divi rendering (PR: "refactor: split divi_template.go, text/template rendering")
 
