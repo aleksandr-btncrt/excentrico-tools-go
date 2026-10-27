@@ -18,14 +18,14 @@ Ground rule for every step: `go build ./... && go vet ./... && go test ./...` mu
 
 ### Step 1 — Stop the crashes (PR: "fix: template validation and nil-config panic")
 
-- [ ] 1.1 Create `internal/services/template_data.go`; move `TemplateData`, `Header`, `Menu`, `Section`, `Text`, `Ndc`, `Footer` out of `divi_template.go:128-195`. Add `json:"button"` tag to `Footer.Button` and new field `ButtonBgColor string \`json:"button_bg_color"\``.
-- [ ] 1.2 Add `func (t TemplateData) Validate() error` listing every missing required path (`menu.menu_id`, `header.title_text_color`, `header.subhead_text_color`, `contenido.background_color_gradient_stops`, `texto.header_4_text_color`, `ndc.text.color`, `footer.section.global_module`).
-- [ ] 1.3 In `main.go` `loadYearTemplateConfig` (`main.go:308-344`): decode with `DisallowUnknownFields()`, call `Validate()`, and return an error instead of nil. In `main` treat a missing/invalid template as fatal when a year is given; add `-template <path>` flag for the no-year case. Remove the "warn and continue" branch at `main.go:132-138`.
-- [ ] 1.4 Change `GenerateCompleteTemplate`, `CreateStandardFilmTemplate`, `SaveDiviTemplateToFile`, `CreateOrUpdateWordPressProject`, `ProcessSingleFilm`, `ProcessFilms` to take `TemplateData` by value.
-- [ ] 1.5 Use `FooterProps.Button.ButtonBgColor` in `FooterComponent.Render` in place of the hard-coded `ColorSecondary` (`divi_template.go:941`, 2nd `button_bg_color` arg).
+- [x] 1.1 Create `internal/services/template_data.go`; move `TemplateData`, `Header`, `Menu`, `Section`, `Text`, `Ndc`, `Footer` out of `divi_template.go:128-195`. Add `json:"button"` tag to `Footer.Button` and new field `ButtonBgColor string \`json:"button_bg_color"\``.
+- [x] 1.2 Add `func (t TemplateData) Validate() error` listing every missing required path (`menu.menu_id`, `header.title_text_color`, `header.subhead_text_color`, `contenido.background_color_gradient_stops`, `texto.header_4_text_color`, `ndc.text.color`, `footer.section.global_module`).
+- [x] 1.3 In `main.go` `loadYearTemplateConfig` (`main.go:308-344`): decode with `DisallowUnknownFields()`, call `Validate()`, and return an error instead of nil. In `main` treat a missing/invalid template as fatal when a year is given; add `-template <path>` flag for the no-year case. Remove the "warn and continue" branch at `main.go:132-138`.
+- [x] 1.4 Change `GenerateCompleteTemplate`, `CreateStandardFilmTemplate`, `SaveDiviTemplateToFile`, `CreateOrUpdateWordPressProject`, `ProcessSingleFilm`, `ProcessFilms` to take `TemplateData` by value.
+- [x] 1.5 Use `FooterProps.Button.ButtonBgColor` in `FooterComponent.Render` in place of the hard-coded `ColorSecondary` (`divi_template.go:941`, 2nd `button_bg_color` arg).
 - [!] 1.6 **Not done — by owner decision (2026-10-27): files in `templates/` come from Divi and are not to be edited by this refactor. `2025.json` stays as-is and is listed as unsupported in the template test; loading it fails fast with a readable error.** Original item: Rewrite `templates/2025.json` into the current schema: `header.*` from `et_pb_fullwidth_header` (prefix `#` on both colours), `menu.menu_id` = `"137"`, `contenido.*` from `et_pb_section`, and fill the remaining `menu`/`texto`/`ndc`/`footer` values from the constants at `divi_template.go:18-39` plus `URLHeaderBackground` for images.
-- [ ] 1.7 Add `TestTemplateFiles_Validate` that globs `../../templates/*.json`, decodes strictly, and asserts `Validate()==nil` for each. (Adjusted: files listed as unsupported — currently `2025.json` — must instead fail to load.)
-- [ ] 1.8 Verify: `./excentrico-tools-go -menu process -year 1999` exits 1 with a readable message; golden test from 0.2 still passes for 2026.
+- [x] 1.7 Add `TestTemplateFiles_Validate` that globs `../../templates/*.json`, decodes strictly, and asserts `Validate()==nil` for each. (Adjusted: files listed as unsupported — currently `2025.json` — must instead fail to load.)
+- [x] 1.8 Verify: `./excentrico-tools-go -menu process -year 1999` exits 1 with a readable message; golden test from 0.2 still passes for 2026.
 
 ### Step 2 — Remaining correctness fixes (PR: "fix: category match, media post_id, caption, metadata.json, pagination")
 

@@ -1,7 +1,6 @@
 package services
 
 import (
-	"encoding/json"
 	"flag"
 	"os"
 	"path/filepath"
@@ -15,17 +14,13 @@ import (
 // Only use it for intentional, reviewed output changes.
 var updateGolden = flag.Bool("update", false, "rewrite golden files in testdata/")
 
-func loadTemplateFixture(t *testing.T, year string) *TemplateData {
+func loadTemplateFixture(t *testing.T, year string) TemplateData {
 	t.Helper()
-	raw, err := os.ReadFile(filepath.Join("..", "..", "templates", year+".json"))
+	cfg, err := LoadTemplateData(filepath.Join("..", "..", "templates", year+".json"))
 	if err != nil {
-		t.Fatalf("read template: %v", err)
+		t.Fatalf("load template: %v", err)
 	}
-	var cfg TemplateData
-	if err := json.Unmarshal(raw, &cfg); err != nil {
-		t.Fatalf("decode template: %v", err)
-	}
-	return &cfg
+	return cfg
 }
 
 // goldenFilm is a hand-written fixture covering escaping, accents, multiple

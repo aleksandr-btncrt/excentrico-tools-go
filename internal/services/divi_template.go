@@ -125,55 +125,6 @@ type DiviFilmTemplate struct {
 	GalleryMediaIds string         `json:"gallery_media_ids"`
 }
 
-type Header struct {
-	TitleTextColor        string `json:"title_text_color"`
-	SubHeadTextColor      string `json:"subhead_text_color"`
-	BackgroundEnableColor string `json:"background_enable_color"`
-}
-
-type Menu struct {
-	MenuId          string `json:"menu_id,omitempty"`
-	ActiveLinkColor string `json:"active_link_color,omitempty"`
-	MenuTextColor   string `json:"menu_text_color,omitempty"`
-	BackgroundColor string `json:"background_color,omitempty"`
-	BackgroundImage string `json:"background_image,omitempty"`
-}
-
-type Section struct {
-	Background                   string `json:"background_color,omitempty"`
-	BackgroundColorGradientStops string `json:"background_color_gradient_stops,omitempty"`
-	BackgroundColorGradientStart string `json:"background_color_gradient_start,omitempty"`
-	BackgroundColorGradientEnd   string `json:"background_color_gradient_end,omitempty"`
-}
-
-type Text struct {
-	Header4TextColor string `json:"header_4_text_color,omitempty"`
-	BoxShadowColor   string `json:"box_shadow_color,omitempty"`
-}
-
-type TemplateData struct {
-	Header      Header  `json:"header"`
-	Menu        Menu    `json:"menu"`
-	Contenido   Section `json:"contenido"`
-	Texto    		Text    `json:"texto"`
-	Ndc         Ndc     `json:"ndc"`
-	Footer			Footer  `json:"footer"`
-}
-
-type Footer struct {
-	Section struct {
-		BackgroundImage string `json:"background_image"`
-		BackgroundPosition string `json:"background_position"`
-		GlobalModule string `json:"global_module"`
-	} `json:"section"`
-	Button struct {
-		BoxShadowColor string `json:"box_shadow_color"`
-		ButtonIconColor string `json:"button_icon_color"`
-		ButtonBorderColor string `json:"button_border_color"`
-		ButtonTextColor string `json:"button_text_color"`
-	}
-}
-
 type Credits struct {
 	Production   string `json:"production,omitempty"`
 	Script       string `json:"script,omitempty"`
@@ -183,15 +134,6 @@ type Credits struct {
 	Editing      string `json:"editing,omitempty"`
 	Cast         string `json:"cast,omitempty"`
 	OtherCredits string `json:"other_credits,omitempty"`
-}
-
-type Ndc struct {
-	Text struct {
-		DisabledOn      string `json:"disabled_on"`
-		Color           string `json:"color"`
-		BackgroundColor string `json:"background_color"`
-		BoxShadowColor  string `json:"box_shadow_color"`
-	} `json:"text"`
 }
 
 func parseDirectors(directorString string) []string {
@@ -415,13 +357,13 @@ func (s *DiviTemplateService) selectBackgroundImageURL(imageIds []int, wordpress
 	return ""
 }
 
-func (s *DiviTemplateService) GenerateDiviShortcodeTemplate(templateData *DiviFilmTemplate, year string, templateConfig *TemplateData) string {
+func (s *DiviTemplateService) GenerateDiviShortcodeTemplate(templateData *DiviFilmTemplate, year string, templateConfig TemplateData) string {
 	// Use the factory function to create a standard template composition
 	composer := s.CreateStandardFilmTemplate(templateData, year, templateConfig)
 	return composer.Compose()
 }
 
-func (s *DiviTemplateService) GenerateCompleteTemplate(filmData *FilmData, imageIds []int, wordpressService *WordPressService, tursoService *TursoService, filmID string, year string, templateConfig *TemplateData) (*DiviFilmTemplate, string) {
+func (s *DiviTemplateService) GenerateCompleteTemplate(filmData *FilmData, imageIds []int, wordpressService *WordPressService, tursoService *TursoService, filmID string, year string, templateConfig TemplateData) (*DiviFilmTemplate, string) {
 	templateData := s.GenerateDiviTemplateDataWithWordPress(filmData, imageIds, wordpressService, tursoService, filmID)
 
 	shortcodes := s.GenerateDiviShortcodeTemplate(templateData, year, templateConfig)
@@ -430,7 +372,7 @@ func (s *DiviTemplateService) GenerateCompleteTemplate(filmData *FilmData, image
 }
 
 // Factory function to create a standard film template with all components
-func (s *DiviTemplateService) CreateStandardFilmTemplate(templateData *DiviFilmTemplate, year string, templateConfig *TemplateData) *DiviTemplateComposer {
+func (s *DiviTemplateService) CreateStandardFilmTemplate(templateData *DiviFilmTemplate, year string, templateConfig TemplateData) *DiviTemplateComposer {
 	// Create subhead with country, year, and duration
 	subhead := fmt.Sprintf("%s · %s · %s", templateData.Country, templateData.Year, templateData.Duration)
 
@@ -501,7 +443,7 @@ type DiviTemplateFile struct {
 	Thumbnails   []any                    `json:"thumbnails"`
 }
 
-func (s *DiviTemplateService) SaveDiviTemplateToFile(filmData *FilmData, imageIds []int, wordpressService *WordPressService, tursoService *TursoService, filmID string, filmDir string, year string, wordpressPostID int, templateConfig *TemplateData) error {
+func (s *DiviTemplateService) SaveDiviTemplateToFile(filmData *FilmData, imageIds []int, wordpressService *WordPressService, tursoService *TursoService, filmID string, filmDir string, year string, wordpressPostID int, templateConfig TemplateData) error {
 	_, shortcodes := s.GenerateCompleteTemplate(filmData, imageIds, wordpressService, tursoService, filmID, year, templateConfig)
 
 	// Use WordPress Post ID instead of film title for better consistency
@@ -938,7 +880,7 @@ func (f *FooterComponent) Render() string {
 			[/et_pb_column]
 		[/et_pb_row]
 	[/et_pb_section]`,
-		BuilderVersion, f.FooterProps.Section.BackgroundImage, f.FooterProps.Section.BackgroundPosition, f.FooterProps.Section.GlobalModule, GlobalColorsInfo, ModulePresetDefault, GlobalColorsInfo, ModulePresetDefault, GlobalColorsInfo, f.ButtonText, BuilderVersion, ModulePresetDefault, CustomButtonOn, f.FooterProps.Button.ButtonTextColor, ColorSecondary, f.FooterProps.Button.ButtonBorderColor, FontBold, f.FooterProps.Button.ButtonIconColor, BoxShadowPreset3, f.FooterProps.Button.BoxShadowColor, GlobalColorsInfo, ColorYellow, ColorCoral, ColorCoral,
+		BuilderVersion, f.FooterProps.Section.BackgroundImage, f.FooterProps.Section.BackgroundPosition, f.FooterProps.Section.GlobalModule, GlobalColorsInfo, ModulePresetDefault, GlobalColorsInfo, ModulePresetDefault, GlobalColorsInfo, f.ButtonText, BuilderVersion, ModulePresetDefault, CustomButtonOn, f.FooterProps.Button.ButtonTextColor, f.FooterProps.Button.ButtonBgColor, f.FooterProps.Button.ButtonBorderColor, FontBold, f.FooterProps.Button.ButtonIconColor, BoxShadowPreset3, f.FooterProps.Button.BoxShadowColor, GlobalColorsInfo, ColorYellow, ColorCoral, ColorCoral,
 		BuilderVersion, GlobalColorsInfo, BuilderVersion, GlobalColorsInfo, ColorPrimary, ColorPink, ColorPink, BuilderVersion, CustomButtonOn, ColorPrimary, ColorSecondary, ColorSecondary, GlobalColorsInfo, URLFacebook, ColorPrimary, BuilderVersion, ColorSecondary, BackgroundColorOn, GlobalColorsInfo, URLInstagram, ColorPrimary, BuilderVersion, ColorSecondary, BackgroundColorOn, GlobalColorsInfo, URLTwitter, ColorPrimary, BuilderVersion, ColorSecondary, BackgroundColorOn, GlobalColorsInfo,
 		BuilderVersion, GlobalColorsInfo, BuilderVersion, ColorYellow, FontBold, ColorDark, ColorDark, GlobalColorsInfo, ColorDark, EmailContact, ColorDark, EmailContact,
 		BuilderVersion, GlobalColorsInfo, ColorPrimary, ColorPrimary, BuilderVersion, ColorDark, ColorDark, FontExtraBold, ColorSecondary, ColorPrimary, GlobalColorsInfo,
