@@ -146,7 +146,7 @@ func ProcessGoogleDriveFiles(ctx context.Context, filmDir string, driveService C
 	enlacesStr := film.Enlaces
 	l := logger.Get()
 	op := l.StartOperation("process_drive_files")
-	
+
 	filmID := utils.SanitizeFilename(filmName)
 	op.WithFilm(filmID, filmName, "", "")
 	op.WithContext("enlaces_url", enlacesStr)
@@ -211,9 +211,7 @@ func ProcessGoogleDriveFiles(ctx context.Context, filmDir string, driveService C
 			})
 		}
 
-		for _, fileInfo := range filteredFiles {
-			filesToDownload = append(filesToDownload, fileInfo)
-		}
+		filesToDownload = append(filesToDownload, filteredFiles...)
 		newCount = len(filteredFiles)
 	} else {
 		op.WithContext("existing_metadata", true)
@@ -275,7 +273,7 @@ func ProcessGoogleDriveFiles(ctx context.Context, filmDir string, driveService C
 		downloadOp.WithDrive(folderID, fileInfo.ID, fileInfo.Name)
 		downloadOp.WithContext("mime_type", fileInfo.MimeType)
 		downloadOp.WithContext("file_path", filePath)
-		
+
 		if err := DownloadFile(ctx, driveService, fileInfo.ID, filePath); err != nil {
 			downloadOp.Fail(fmt.Sprintf("Failed to download %s", fileInfo.Name), err)
 			failedDownloads++
@@ -308,7 +306,7 @@ func ProcessGoogleDriveFiles(ctx context.Context, filmDir string, driveService C
 				imgOp := l.StartOperation("optimize_single_image")
 				imgOp.WithFilm(filmID, filmName, "", "")
 				imgOp.WithDrive(folderID, fileInfo.ID, fileInfo.Name)
-				
+
 				if err := imageService.ResizeImage(originalPath, optimizedPath); err != nil {
 					imgOp.Fail(fmt.Sprintf("Failed to optimize image %s", fileInfo.Name), err)
 					failedOptimizations++
@@ -319,7 +317,7 @@ func ProcessGoogleDriveFiles(ctx context.Context, filmDir string, driveService C
 					if optimizedInfo, err := os.Stat(optimizedPath); err == nil {
 						originalSize := originalInfo.Size()
 						optimizedSize := optimizedInfo.Size()
-						
+
 						imgOp.WithImage(originalPath, optimizedPath, originalSize, optimizedSize)
 						imgOp.Complete(fmt.Sprintf("Optimized image '%s'", fileInfo.Name))
 					}
@@ -335,10 +333,7 @@ func ProcessGoogleDriveFiles(ctx context.Context, filmDir string, driveService C
 	optimizeOp.Complete(fmt.Sprintf("Image optimization completed: %d images processed", processedCount))
 
 	// Only save metadata for filtered files (from allowed folders)
-	var imageFiles []*models.FileWithPath
-	for _, fileInfo := range filteredFiles {
-		imageFiles = append(imageFiles, fileInfo)
-	}
+	imageFiles := append([]*models.FileWithPath(nil), filteredFiles...)
 
 	if err := services.SaveDriveFilesMetadata(tursoService, filmID, imageFiles); err != nil {
 		op.Fail("Failed to save Drive media metadata", err)

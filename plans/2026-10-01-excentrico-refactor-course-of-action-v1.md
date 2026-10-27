@@ -88,10 +88,10 @@ Ground rule for every step: `go build ./... && go vet ./... && go test ./...` mu
 
 ### Step 8 — Tests, CI, docs (PR: "docs: README rewrite; ci: lint blocking, goreleaser")
 
-- [ ] 8.1 Remaining pure-function tests: `CreateWordPressSlug`, `parseDuration`, `ExtractFileIDFromURL`, `SanitizeFilename`, `isAllowedFolder`, `filterStillsImages`.
-- [ ] 8.2 Flip lint job to blocking; add `go test -race -cover ./...`.
-- [ ] 8.3 Add `.goreleaser.yaml` (linux/darwin/windows × amd64/arm64; archive `LICENSE`, `README.md`, `configuration.json.example`, `templates/**`, `metadata/**`; `-X main.version`), and set `logger.version` from it.
-- [ ] 8.4 Rewrite `README.md` per the nine-section outline in `06-tests-docs-ci.md`; remove the non-existent API examples and `examples/` references; document sheet/Drive folder conventions, template schema, all flags, Turso metadata types.
+- [x] 8.1 Remaining pure-function tests: `CreateWordPressSlug`, `parseDuration`, `ExtractFileIDFromURL`, `SanitizeFilename`, `isAllowedFolder`, `filterStillsImages`.
+- [x] 8.2 Flip lint job to blocking; add `go test -race -cover ./...`. (Baseline findings fixed: gofmt, errcheck, S1011; `configuration.json` now written 0600; G301/G302/G306 for films/logs output and G101 false positives excluded with reasons in `.golangci.yml`.)
+- [x] 8.3 Add `.goreleaser.yaml` (linux/darwin/windows × amd64/arm64; archive `LICENSE`, `README.md`, `configuration.json.example`, `templates/**`, `metadata/**`; `-X main.version`), and set `logger.version` from it. (Also `-version`; validated with `goreleaser check` and a local snapshot build of all six targets.)
+- [x] 8.4 Rewrite `README.md` per the nine-section outline in `06-tests-docs-ci.md`; remove the non-existent API examples and `examples/` references; document sheet/Drive folder conventions, template schema, all flags, Turso metadata types.
 
 ---
 

@@ -95,7 +95,7 @@ type WordPressCategory struct {
 	Slug        string `json:"slug,omitempty"`
 	Description string `json:"description,omitempty"`
 	Count       int    `json:"count,omitempty"`
-	Parent 			int    `json:"parent"`
+	Parent      int    `json:"parent"`
 }
 
 type WordPressTag struct {
@@ -178,7 +178,7 @@ func cleanCategories(categories []int) []int {
 	if categories == nil {
 		return nil
 	}
-	
+
 	var cleaned []int
 	for _, cat := range categories {
 		if cat != 0 {
@@ -509,7 +509,7 @@ func (s *WordPressService) makeRequest(ctx context.Context, method, endpoint str
 	op.WithContext("http_method", method)
 	op.WithContext("http_url", url)
 	op.WithContext("http_endpoint", endpoint)
-	
+
 	if body != nil {
 		// Payloads contain full Divi shortcode bodies; keep them out of the log
 		// unless -debug is on.
@@ -544,7 +544,7 @@ func (s *WordPressService) makeRequest(ctx context.Context, method, endpoint str
 		op.Fail("HTTP request failed", err)
 		return nil, fmt.Errorf("failed to make request: %v", err)
 	}
-	
+
 	// Log response status
 	op.WithContext("http_status_code", resp.StatusCode)
 
@@ -563,12 +563,12 @@ func (s *WordPressService) makeRequest(ctx context.Context, method, endpoint str
 	return resp, nil
 }
 
-func (s *WordPressService) GetCategoryIDsByNames(ctx context.Context, year string,categoryNames []string) ([]int, error) {
+func (s *WordPressService) GetCategoryIDsByNames(ctx context.Context, year string, categoryNames []string) ([]int, error) {
 	l := logger.Get()
 	op := l.StartOperation("wordpress_get_category_ids")
 	op.WithContext("year", year)
 	op.WithContext("category_names", categoryNames)
-	
+
 	var categoryIDs []int
 	foundCount := 0
 	notFoundCount := 0

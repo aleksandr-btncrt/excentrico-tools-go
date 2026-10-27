@@ -99,7 +99,9 @@ func (a *App) SetEmbedImages(embed bool) {
 // Close cleans up resources
 func (a *App) Close() {
 	if a.tursoService != nil {
-		a.tursoService.Close()
+		if err := a.tursoService.Close(); err != nil {
+			logger.Get().Warnf("close", "Failed to close Turso connection: %v", err)
+		}
 	}
 }
 

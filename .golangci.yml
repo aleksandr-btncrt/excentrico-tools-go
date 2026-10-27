@@ -18,6 +18,12 @@ linters:
         # G304: file paths come from the operator's own configuration and
         # from directories this tool creates; reading them is the point.
         - G304
+        # G301/G302/G306: films/ and logs/ are working output meant to be
+        # opened by the operator and other tools (0755 dirs, 0644 files).
+        # The one file holding secrets, configuration.json, is written 0600.
+        - G301
+        - G302
+        - G306
   exclusions:
     presets:
       - std-error-handling
@@ -26,6 +32,12 @@ linters:
       - path: _test\.go
         linters:
           - gosec
+      # G101: sheet column headers and the default-config placeholders
+      # ("your-application-password") are not credentials.
+      - path: internal/(sheet/columns|config/config)\.go
+        linters:
+          - gosec
+        text: G101
 
 formatters:
   enable:
