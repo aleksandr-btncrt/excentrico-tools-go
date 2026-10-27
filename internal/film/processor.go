@@ -1,6 +1,7 @@
 package film
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -38,16 +39,14 @@ func NewProcessor(
 	}
 }
 
-// ProcessSingleFilm processes a single film from the Google Sheet data
-func (p *Processor) ProcessSingleFilm(obj map[string]any, baseDir string, year string, filmName string, templateConfig services.TemplateData) error {
+// ProcessSingleFilm processes a single film from the Google Sheet data.
+// caption is written to <filmDir>/metadata.json as {"caption": ...}.
+func (p *Processor) ProcessSingleFilm(obj map[string]any, baseDir string, year string, filmName string, caption string, templateConfig services.TemplateData) error {
 	l := logger.Get()
 	op := l.StartOperation("process_single_film")
 	
 	filmID := utils.SanitizeFilename(filmName)
-	filmSection := ""
-	if sec, exists := obj["SECCIÓN"]; exists && sec != nil {
-		filmSection = sec.(string)
-	}
+	filmSection := utils.CellString(obj["SECCIÓN"])
 	
 	op.WithFilm(filmID, filmName, year, filmSection)
 	
@@ -60,9 +59,14 @@ func (p *Processor) ProcessSingleFilm(obj map[string]any, baseDir string, year s
 		return fmt.Errorf("failed to create directory: %v", err)
 	}
 
+	if err := WriteCaption(filmDir, caption); err != nil {
+		op.Fail("Failed to write film caption", err)
+		return err
+	}
+
 	// Process Google Drive files if available
 	if enlaces, exists := obj["ENLACES"]; exists && enlaces != nil {
-		enlacesStr := enlaces.(string)
+		enlacesStr := utils.CellString(enlaces)
 		if enlacesStr != "" {
 			driveOp := l.StartOperation("process_drive_files")
 			driveOp.WithFilm(filmID, filmName, year, filmSection)
@@ -112,5 +116,23 @@ func (p *Processor) ProcessSingleFilm(obj map[string]any, baseDir string, year s
 	projectOp.Complete("Successfully created/updated WordPress project")
 
 	op.Complete(fmt.Sprintf("Successfully processed film '%s'", filmName))
+	return nil
+}
+
+// FilmMetadata is the content of films/<film>/metadata.json.
+type FilmMetadata struct {
+	Caption string `json:"caption"`
+}
+
+// WriteCaption writes {"caption": caption} to <filmDir>/metadata.json.
+func WriteCaption(filmDir, caption string) error {
+	data, err := json.MarshalIndent(FilmMetadata{Caption: caption}, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode film metadata: %w", err)
+	}
+	path := filepath.Join(filmDir, "metadata.json")
+	if err := os.WriteFile(path, append(data, '\n'), 0o644); err != nil {
+		return fmt.Errorf("write %s: %w", path, err)
+	}
 	return nil
 }

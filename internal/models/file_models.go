@@ -21,3 +21,15 @@ type WordPressMetadata struct {
 	CreatedAt string `json:"created_at"`
 	UpdatedAt string `json:"updated_at"`
 }
+
+// MediaInfo is one entry of the "wordpress_media" metadata list stored in
+// Turso: a WordPress media item uploaded (or reused) for a film. The JSON
+// shape is unchanged from the previous map[string]any representation.
+type MediaInfo struct {
+	ID        int    `json:"id"`
+	Title     string `json:"title"`
+	SourceURL string `json:"source_url"`
+	AltText   string `json:"alt_text"`
+	FilePath  string `json:"file_path"`
+	PostID    int    `json:"post_id"`
+}

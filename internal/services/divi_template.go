@@ -233,7 +233,7 @@ func (s *DiviTemplateService) filterStillsImages(imageIds []int, tursoService *T
 	}
 
 	// Get WordPress media metadata to map image IDs to file paths
-	var wpMediaMetadata []map[string]any
+	var wpMediaMetadata []models.MediaInfo
 	err := tursoService.GetMetadata(filmID, "wordpress_media", &wpMediaMetadata)
 	if err != nil {
 		// If no WordPress media metadata, return empty
@@ -243,21 +243,8 @@ func (s *DiviTemplateService) filterStillsImages(imageIds []int, tursoService *T
 	// Create a map from WordPress media ID to file path
 	mediaIDToFilePath := make(map[int]string)
 	for _, media := range wpMediaMetadata {
-		if idValue, exists := media["id"]; exists {
-			var mediaID int
-			switch v := idValue.(type) {
-			case int:
-				mediaID = v
-			case float64:
-				mediaID = int(v)
-			default:
-				continue
-			}
-			if filePathValue, exists := media["file_path"]; exists {
-				if filePath, ok := filePathValue.(string); ok {
-					mediaIDToFilePath[mediaID] = filePath
-				}
-			}
+		if media.ID != 0 && media.FilePath != "" {
+			mediaIDToFilePath[media.ID] = media.FilePath
 		}
 	}
 

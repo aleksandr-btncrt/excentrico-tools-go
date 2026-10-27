@@ -29,15 +29,15 @@ Ground rule for every step: `go build ./... && go vet ./... && go test ./...` mu
 
 ### Step 2 — Remaining correctness fixes (PR: "fix: category match, media post_id, caption, metadata.json, pagination")
 
-- [ ] 2.1 `wordpress.go:744`: `ReplaceAll(..., " ", "-")`; hoist `SearchCategories(year)` above the loop; extract `matchCategory(cats, name) *WordPressCategory`; delete `GetCategories` and `SearchCategoriesWithParams`.
-- [ ] 2.2 Add `models.MediaInfo` struct; replace every `[]map[string]any` for `wordpress_media` (`wordpress/operations.go:160,257,294,539`; `divi_template.go:294-320`). This fixes the `float64`/`int` bug in `updateMediaMetadataWithPostID`.
-- [ ] 2.3 Add `utils.CellString(any) string`; replace all nine `.(string)` assertions on sheet data.
-- [ ] 2.4 `app.go:276-312` `CreateMetadata`: split directors with the shared regex (temporarily copy from `wordpress/operations.go:68`; de-duplicated in Step 5), join with `" & "`, upper-case. `parseDate` → `time.Parse` returning `(string, error)`.
-- [ ] 2.5 Move film caption writing into `Processor.ProcessSingleFilm` after `MkdirAll`; write `{"caption": …}` JSON to `filmDir/metadata.json`; return the error. Delete `App.SaveMetadata`.
-- [ ] 2.6 `google_drive.go:94-106`: paginate with `PageToken`, `PageSize(1000)`, add `modifiedTime` to `Fields`.
-- [ ] 2.7 `wordpress.go:116`: fall back to `Password` when `ApplicationPassword` is empty. Drop `Type: "post"` from the post payload (`wordpress/operations.go:413`).
-- [ ] 2.8 Menu selection: after the user picks a WP menu in `main.go:143-202`, set `templateConfig.Menu.MenuId = strconv.Itoa(menu.ID)`; remove the abort at `main.go:215-219`; rename `-nav-menu` → `-menu-slug` keeping the old name as alias.
-- [ ] 2.9 Unit tests: `CreateMetadata`, `parseDate`, `matchCategory`, `cleanCategories`, `MediaInfo` round-trip, `CellString`.
+- [x] 2.1 `wordpress.go:744`: `ReplaceAll(..., " ", "-")`; hoist `SearchCategories(year)` above the loop; extract `matchCategory(cats, name) *WordPressCategory`; delete `GetCategories` and `SearchCategoriesWithParams`.
+- [x] 2.2 Add `models.MediaInfo` struct; replace every `[]map[string]any` for `wordpress_media` (`wordpress/operations.go:160,257,294,539`; `divi_template.go:294-320`). This fixes the `float64`/`int` bug in `updateMediaMetadataWithPostID`.
+- [x] 2.3 Add `utils.CellString(any) string`; replace all nine `.(string)` assertions on sheet data.
+- [x] 2.4 `app.go:276-312` `CreateMetadata`: split directors with the shared regex (temporarily copy from `wordpress/operations.go:68`; de-duplicated in Step 5), join with `" & "`, upper-case. `parseDate` → `time.Parse` returning `(string, error)`.
+- [x] 2.5 Move film caption writing into `Processor.ProcessSingleFilm` after `MkdirAll`; write `{"caption": …}` JSON to `filmDir/metadata.json`; return the error. Delete `App.SaveMetadata`.
+- [x] 2.6 `google_drive.go:94-106`: paginate with `PageToken`, `PageSize(1000)`, add `modifiedTime` to `Fields`.
+- [x] 2.7 `wordpress.go:116`: fall back to `Password` when `ApplicationPassword` is empty. Drop `Type: "post"` from the post payload (`wordpress/operations.go:413`).
+- [x] 2.8 Menu selection: after the user picks a WP menu in `main.go:143-202`, set `templateConfig.Menu.MenuId = strconv.Itoa(menu.ID)`; remove the abort at `main.go:215-219`; rename `-nav-menu` → `-menu-slug` keeping the old name as alias.
+- [x] 2.9 Unit tests: `CreateMetadata`, `parseDate`, `matchCategory`, `cleanCategories`, `MediaInfo` round-trip, `CellString`.
 
 ### Step 3 — Security and robustness (PR: "chore: remove credential logging, add timeouts, sentinel errors")
 

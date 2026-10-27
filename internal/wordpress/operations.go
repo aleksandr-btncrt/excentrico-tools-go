@@ -59,11 +59,11 @@ func parseDirectorNames(filmData map[string]any) []string {
 	if filmData == nil {
 		return nil
 	}
-	d, _ := filmData["DIRECCIÓN"].(string)
+	d := utils.CellString(filmData["DIRECCIÓN"])
 	if d == "" {
 		return nil
 	}
-	multi, _ := filmData["Multi Dir"].(string)
+	multi := utils.CellString(filmData["Multi Dir"])
 	if strings.ToUpper(strings.TrimSpace(multi)) == "SI" {
 		re := regexp.MustCompile(`\s*,\s*|\s+\+\s+|\s+y\s+|\s*&\s*`)
 		parts := re.Split(d, -1)
@@ -157,7 +157,11 @@ func UploadMediaToWordPress(wordpressService *services.WordPressService, tursoSe
 		log.Printf("Loaded existing image metadata: %d images already uploaded", len(existingImageMetadata))
 	}
 
-	var uploadedMedia []map[string]any
+	var uploadedMedia []models.MediaInfo
+	postID := 0
+	if metadata != nil {
+		postID = metadata.PostID
+	}
 	imageMetadataMap := make(map[string]int)
 
 	for fileName, mediaID := range existingImageMetadata {
@@ -254,18 +258,14 @@ func UploadMediaToWordPress(wordpressService *services.WordPressService, tursoSe
 
 			if mediaID != 0 {
 				imageMetadataMap[fileName] = mediaID
-				mediaInfo := map[string]any{
-					"id":         mediaID,
-					"title":      titleForMeta,
-					"source_url": sourceURL,
-					"alt_text":   altTextForMeta,
-					"file_path":  webFile,
-					"post_id":    0,
-				}
-				if metadata != nil {
-					mediaInfo["post_id"] = metadata.PostID
-				}
-				uploadedMedia = append(uploadedMedia, mediaInfo)
+				uploadedMedia = append(uploadedMedia, models.MediaInfo{
+					ID:        mediaID,
+					Title:     titleForMeta,
+					SourceURL: sourceURL,
+					AltText:   altTextForMeta,
+					FilePath:  webFile,
+					PostID:    postID,
+				})
 			}
 			continue
 		}
@@ -291,18 +291,14 @@ func UploadMediaToWordPress(wordpressService *services.WordPressService, tursoSe
 		uploadOp.WithContext("media_title", media.Title.String())
 		uploadOp.Complete(fmt.Sprintf("Successfully uploaded media: %s", fileName))
 
-		mediaInfo := map[string]any{
-			"id":         media.ID,
-			"title":      media.Title.String(),
-			"source_url": media.SourceURL,
-			"alt_text":   media.AltText,
-			"file_path":  webFile,
-			"post_id":    0,
-		}
-		if metadata != nil {
-			mediaInfo["post_id"] = metadata.PostID
-		}
-		uploadedMedia = append(uploadedMedia, mediaInfo)
+		uploadedMedia = append(uploadedMedia, models.MediaInfo{
+			ID:        media.ID,
+			Title:     media.Title.String(),
+			SourceURL: media.SourceURL,
+			AltText:   media.AltText,
+			FilePath:  webFile,
+			PostID:    postID,
+		})
 		imageMetadataMap[fileName] = media.ID
 		uploadedCount++
 	}
@@ -339,16 +335,13 @@ func CreateOrUpdateWordPressProject(wordpressService *services.WordPressService,
 	op := l.StartOperation("create_update_wordpress_project")
 	
 	filmTitle := "Untitled Film"
-	if title, exists := filmData["TÍTULO ORIGINAL"]; exists && title != nil {
-		filmTitle = title.(string)
+	if title := utils.CellString(filmData["TÍTULO ORIGINAL"]); title != "" {
+		filmTitle = title
 	}
 
 	filmID := utils.SanitizeFilename(filmTitle)
 	
-	section := ""
-	if sec, exists := filmData["SECCIÓN"]; exists && sec != nil {
-		section = sec.(string)
-	}
+	section := utils.CellString(filmData["SECCIÓN"])
 	
 	op.WithFilm(filmID, filmTitle, year, section)
 	op.WithContext("film_dir", filmDir)
@@ -410,7 +403,6 @@ func CreateOrUpdateWordPressProject(wordpressService *services.WordPressService,
 	post := &services.WordPressPost{
 		Title:      services.WordPressRenderedField{Rendered: filmTitle},
 		Status:     "draft",
-		Type:       "post",
 		Slug:       CreateWordPressSlug(slugText),
 		Categories: categoryIDs,
 		Meta: map[string]any{
@@ -536,7 +528,7 @@ func selectFeaturedMediaID(imageIds []int, wordpressService *services.WordPressS
 // updateMediaMetadataWithPostID updates media metadata with the correct PostID
 func updateMediaMetadataWithPostID(tursoService *services.TursoService, filmID string, postID int) error {
 	// Get existing media metadata
-	var mediaMetadata []map[string]any
+	var mediaMetadata []models.MediaInfo
 	err := tursoService.GetMetadata(filmID, "wordpress_media", &mediaMetadata)
 	if err != nil {
 		if strings.Contains(err.Error(), "metadata not found") {
@@ -546,14 +538,14 @@ func updateMediaMetadataWithPostID(tursoService *services.TursoService, filmID s
 		return err
 	}
 
-	// Update PostID for any media that has post_id = 0
+	// Update PostID for any media that has post_id = 0. (Previously this
+	// asserted .(int) on a JSON-decoded value, which is always float64, so the
+	// update never happened.)
 	updated := false
-	for _, media := range mediaMetadata {
-		if postIDValue, exists := media["post_id"]; exists {
-			if postIDInt, ok := postIDValue.(int); ok && postIDInt == 0 {
-				media["post_id"] = postID
-				updated = true
-			}
+	for i := range mediaMetadata {
+		if mediaMetadata[i].PostID == 0 {
+			mediaMetadata[i].PostID = postID
+			updated = true
 		}
 	}
 
@@ -572,10 +564,7 @@ func ConvertObjToFilmData(obj map[string]any) *services.FilmData {
 	}
 
 	getString := func(key string) string {
-		if value, exists := obj[key]; exists && value != nil {
-			return value.(string)
-		}
-		return ""
+		return utils.CellString(obj[key])
 	}
 
 	filmData.TituloOriginal = getString("TÍTULO ORIGINAL")
