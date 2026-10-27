@@ -1,13 +1,12 @@
 package services
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"excentrico-tools-go/internal/models"
 	"fmt"
 	"html"
-	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -151,7 +150,7 @@ func parseDirectors(directorString string) []string {
 	return result
 }
 
-func (s *DiviTemplateService) GenerateDiviTemplateDataWithWordPress(filmData *FilmData, imageIds []int, wordpressService *WordPressService, tursoService *TursoService, filmID string) *DiviFilmTemplate {
+func (s *DiviTemplateService) GenerateDiviTemplateDataWithWordPress(ctx context.Context, filmData *FilmData, imageIds []int, wordpressService *WordPressService, tursoService *TursoService, filmID string) *DiviFilmTemplate {
 	// Parse directors with bio information
 	var directors []DirectorInfo
 	if filmData.Direccion != "" {
@@ -161,14 +160,14 @@ func (s *DiviTemplateService) GenerateDiviTemplateDataWithWordPress(filmData *Fi
 				directors = append(directors, DirectorInfo{
 					Name:     name,
 					Bio:      filmData.BioRealizadorxs,
-					ImageURL: s.findDirectorImage(name, imageIds, wordpressService),
+					ImageURL: s.findDirectorImage(ctx, name, imageIds, wordpressService),
 				})
 			}
 		} else {
 			directors = append(directors, DirectorInfo{
 				Name:     filmData.Direccion,
 				Bio:      filmData.BioRealizadorxs,
-				ImageURL: s.findDirectorImage(filmData.Direccion, imageIds, wordpressService),
+				ImageURL: s.findDirectorImage(ctx, filmData.Direccion, imageIds, wordpressService),
 			})
 		}
 	}
@@ -203,7 +202,7 @@ func (s *DiviTemplateService) GenerateDiviTemplateDataWithWordPress(filmData *Fi
 
 	var backgroundImage string
 	// Try to infer a background image from uploaded media
-	if url := s.selectBackgroundImageURL(imageIds, wordpressService); url != "" {
+	if url := s.selectBackgroundImageURL(ctx, imageIds, wordpressService); url != "" {
 		backgroundImage = url
 	}
 	
@@ -300,7 +299,7 @@ func (s *DiviTemplateService) filterStillsImages(imageIds []int, tursoService *T
 // selectBackgroundImageURL attempts to pick a background image URL from media
 // Preference order by media title/filename/alt text contains: background, header, fondo, bg
 // Falls back to the first media URL if any
-func (s *DiviTemplateService) selectBackgroundImageURL(imageIds []int, wordpressService *WordPressService) string {
+func (s *DiviTemplateService) selectBackgroundImageURL(ctx context.Context, imageIds []int, wordpressService *WordPressService) string {
 	if wordpressService == nil || len(imageIds) == 0 {
 		return ""
 	}
@@ -309,7 +308,7 @@ func (s *DiviTemplateService) selectBackgroundImageURL(imageIds []int, wordpress
 
 	// First pass: try to match keywords
 	for _, id := range imageIds {
-		media, err := wordpressService.GetMedia(id)
+		media, err := wordpressService.GetMedia(ctx, id)
 		if err != nil {
 			continue
 		}
@@ -336,7 +335,7 @@ func (s *DiviTemplateService) selectBackgroundImageURL(imageIds []int, wordpress
 	}
 
 	// Second pass: fallback to first media URL
-	first, err := wordpressService.GetMedia(imageIds[0])
+	first, err := wordpressService.GetMedia(ctx, imageIds[0])
 	if err == nil {
 		return first.SourceURL
 	}
@@ -350,8 +349,8 @@ func (s *DiviTemplateService) GenerateDiviShortcodeTemplate(templateData *DiviFi
 	return composer.Compose()
 }
 
-func (s *DiviTemplateService) GenerateCompleteTemplate(filmData *FilmData, imageIds []int, wordpressService *WordPressService, tursoService *TursoService, filmID string, year string, templateConfig TemplateData) (*DiviFilmTemplate, string) {
-	templateData := s.GenerateDiviTemplateDataWithWordPress(filmData, imageIds, wordpressService, tursoService, filmID)
+func (s *DiviTemplateService) GenerateCompleteTemplate(ctx context.Context, filmData *FilmData, imageIds []int, wordpressService *WordPressService, tursoService *TursoService, filmID string, year string, templateConfig TemplateData) (*DiviFilmTemplate, string) {
+	templateData := s.GenerateDiviTemplateDataWithWordPress(ctx, filmData, imageIds, wordpressService, tursoService, filmID)
 
 	shortcodes := s.GenerateDiviShortcodeTemplate(templateData, year, templateConfig)
 
@@ -430,13 +429,13 @@ type DiviTemplateFile struct {
 	Thumbnails   []any                    `json:"thumbnails"`
 }
 
-func (s *DiviTemplateService) SaveDiviTemplateToFile(filmData *FilmData, imageIds []int, wordpressService *WordPressService, tursoService *TursoService, filmID string, filmDir string, year string, wordpressPostID int, templateConfig TemplateData) error {
-	_, shortcodes := s.GenerateCompleteTemplate(filmData, imageIds, wordpressService, tursoService, filmID, year, templateConfig)
+func (s *DiviTemplateService) SaveDiviTemplateToFile(ctx context.Context, filmData *FilmData, imageIds []int, wordpressService *WordPressService, tursoService *TursoService, filmID string, filmDir string, year string, wordpressPostID int, templateConfig TemplateData) error {
+	_, shortcodes := s.GenerateCompleteTemplate(ctx, filmData, imageIds, wordpressService, tursoService, filmID, year, templateConfig)
 
 	// Use WordPress Post ID instead of film title for better consistency
 	projectID := fmt.Sprintf("%d", wordpressPostID)
 
-	images, err := s.fetchWordPressImagesData(imageIds, wordpressService)
+	images, err := s.fetchWordPressImagesData(ctx, imageIds, wordpressService)
 	if err != nil {
 		return fmt.Errorf("failed to fetch WordPress images data: %v", err)
 	}
@@ -488,17 +487,17 @@ func (s *DiviTemplateService) SaveDiviTemplateToFile(filmData *FilmData, imageId
 	return nil
 }
 
-func (s *DiviTemplateService) fetchWordPressImagesData(imageIds []int, wordpressService *WordPressService) (map[string]DiviImageData, error) {
+func (s *DiviTemplateService) fetchWordPressImagesData(ctx context.Context, imageIds []int, wordpressService *WordPressService) (map[string]DiviImageData, error) {
 	images := make(map[string]DiviImageData)
 
 	for _, imageID := range imageIds {
-		media, err := wordpressService.GetMedia(imageID)
+		media, err := wordpressService.GetMedia(ctx, imageID)
 		if err != nil {
 			fmt.Printf("Warning: Failed to fetch media %d: %v\n", imageID, err)
 			continue
 		}
 
-		encoded, err := s.downloadAndEncodeImage(media.SourceURL)
+		encoded, err := s.downloadAndEncodeImage(ctx, wordpressService, media.SourceURL)
 		if err != nil {
 			fmt.Printf("Warning: Failed to encode image %d: %v\n", imageID, err)
 			encoded = ""
@@ -516,28 +515,15 @@ func (s *DiviTemplateService) fetchWordPressImagesData(imageIds []int, wordpress
 	return images, nil
 }
 
-func (s *DiviTemplateService) downloadAndEncodeImage(url string) (string, error) {
-	resp, err := http.Get(url)
+func (s *DiviTemplateService) downloadAndEncodeImage(ctx context.Context, wordpressService *WordPressService, url string) (string, error) {
+	imageData, err := wordpressService.Download(ctx, url)
 	if err != nil {
-		return "", fmt.Errorf("failed to download image: %v", err)
+		return "", fmt.Errorf("failed to download image: %w", err)
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("failed to download image: status %d", resp.StatusCode)
-	}
-
-	imageData, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("failed to read image data: %v", err)
-	}
-
-	encoded := base64.StdEncoding.EncodeToString(imageData)
-
-	return encoded, nil
+	return base64.StdEncoding.EncodeToString(imageData), nil
 }
 
-func (s *DiviTemplateService) findDirectorImage(directorName string, imageIds []int, wordpressService *WordPressService) string {
+func (s *DiviTemplateService) findDirectorImage(ctx context.Context, directorName string, imageIds []int, wordpressService *WordPressService) string {
 	if wordpressService == nil || len(imageIds) == 0 {
 		return ""
 	}
@@ -545,7 +531,7 @@ func (s *DiviTemplateService) findDirectorImage(directorName string, imageIds []
 	cleanName := strings.ToLower(strings.TrimSpace(directorName))
 
 	for _, imageID := range imageIds {
-		media, err := wordpressService.GetMedia(imageID)
+		media, err := wordpressService.GetMedia(ctx, imageID)
 		if err != nil {
 			continue
 		}
@@ -579,7 +565,7 @@ func (s *DiviTemplateService) findDirectorImage(directorName string, imageIds []
 	nameParts := strings.Fields(cleanName)
 	if len(nameParts) > 1 {
 		for _, imageID := range imageIds {
-			media, err := wordpressService.GetMedia(imageID)
+			media, err := wordpressService.GetMedia(ctx, imageID)
 			if err != nil {
 				continue
 			}

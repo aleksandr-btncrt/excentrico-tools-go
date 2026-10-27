@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bufio"
+	"context"
 	"encoding/json"
 	"excentrico-tools-go/internal/app"
 	"excentrico-tools-go/internal/config"
@@ -10,12 +12,18 @@ import (
 	"excentrico-tools-go/internal/services"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 )
+
+// stdin is shared by all prompts so buffered input is not lost between them.
+var stdin = bufio.NewScanner(os.Stdin)
 
 type RuntimeOptions struct {
 	Menu         string
@@ -130,6 +138,11 @@ func main() {
 
 	var metadata = loadMetadata(runtime.Year, l)
 
+	// Ctrl-C / SIGTERM cancel in-flight HTTP requests and stop before the
+	// next film instead of killing the process mid-upload.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	op := l.StartOperation("initialize_application")
 	application, err := app.New(cfg)
 	if err != nil {
@@ -142,7 +155,7 @@ func main() {
 	// Pick the WordPress navigation menu (from -menu-slug or interactively).
 	// The chosen menu's ID overrides menu.menu_id from the template; with no
 	// choice the template's menu_id is used as-is.
-	menu, err := chooseWordPressMenu(application, runtime, l)
+	menu, err := chooseWordPressMenu(ctx, application, runtime, l)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -162,7 +175,7 @@ func main() {
 	op.WithContext("year", runtime.Year)
 	op.Complete(fmt.Sprintf("Starting film processing with menu '%s' (id %s)", runtime.MenuSlug, templateConfig.Menu.MenuId))
 
-	if err := application.ProcessFilms(runtime.Year, templateConfig, metadata); err != nil {
+	if err := application.ProcessFilms(ctx, runtime.Year, templateConfig, metadata); err != nil {
 		op := l.StartOperation("process_films")
 		op.WithContext("menu_slug", runtime.MenuSlug)
 		op.WithContext("year", runtime.Year)
@@ -181,39 +194,41 @@ func promptMenuSelection() string {
 	fmt.Println("  1) Configuration")
 	fmt.Println("  2) Process movies")
 	fmt.Print("Enter choice [1-2] or name: ")
-	var input string
-	if _, err := fmt.Scanln(&input); err != nil {
-		// handle empty input (e.g., just Enter)
-		if err.Error() == "unexpected newline" {
-			return "process"
-		}
-		log.Printf("Input error: %v", err)
+	input := strings.ToLower(readLine(stdin))
+	if input == "" {
 		return "process"
 	}
-	return strings.ToLower(strings.TrimSpace(input))
+	return input
 }
 
+// promptString prints label and returns the trimmed next line of stdin; an
+// empty line, EOF (piped/closed stdin) or a read error all yield "".
 func promptString(label string) string {
 	fmt.Printf("%s: ", label)
-	var input string
-	if _, err := fmt.Scanln(&input); err != nil {
-		if err.Error() == "unexpected newline" {
-			return ""
+	return readLine(stdin)
+}
+
+// readLine returns the next trimmed line from sc, or "" at EOF or on error.
+// Unlike fmt.Scanln it keeps spaces inside the line and never leaves the rest
+// of a line in the buffer for the next prompt.
+func readLine(sc *bufio.Scanner) string {
+	if !sc.Scan() {
+		if err := sc.Err(); err != nil && err != io.EOF {
+			log.Printf("Input error: %v", err)
 		}
-		log.Printf("Input error: %v", err)
 		return ""
 	}
-	return strings.TrimSpace(input)
+	return strings.TrimSpace(sc.Text())
 }
 
 // chooseWordPressMenu resolves the navigation menu to render in the Divi
 // template. With -menu-slug it must match an existing WordPress menu (error
 // otherwise). Without it the user picks from the list; an empty answer (or a
 // failure to fetch menus) returns nil so the template's menu_id is kept.
-func chooseWordPressMenu(application *app.App, runtime *RuntimeOptions, l *logger.Logger) (*services.WordPressMenu, error) {
+func chooseWordPressMenu(ctx context.Context, application *app.App, runtime *RuntimeOptions, l *logger.Logger) (*services.WordPressMenu, error) {
 	op := l.StartOperation("list_wordpress_menus")
 	op.WithContext("year_filter", runtime.Year)
-	menus, err := application.ListWordPressMenus()
+	menus, err := application.ListWordPressMenus(ctx)
 	if err != nil {
 		op.Fail("Failed to fetch WordPress menus", err)
 		if runtime.MenuSlug != "" {

@@ -1,10 +1,23 @@
 package main
 
 import (
+	"bufio"
+	"strings"
 	"testing"
 
 	"excentrico-tools-go/internal/services"
 )
+
+func TestReadLine(t *testing.T) {
+	// Spaces inside a line are kept, blank lines and EOF (piped stdin with
+	// no more input) yield "", and a final line without newline is read.
+	sc := bufio.NewScanner(strings.NewReader("  menu 2026 \n\nlast"))
+	for i, want := range []string{"menu 2026", "", "last", "", ""} {
+		if got := readLine(sc); got != want {
+			t.Errorf("readLine #%d = %q, want %q", i, got, want)
+		}
+	}
+}
 
 func testMenus() []*services.WordPressMenu {
 	return []*services.WordPressMenu{

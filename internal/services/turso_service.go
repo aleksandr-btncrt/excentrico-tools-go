@@ -3,6 +3,7 @@ package services
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 
@@ -10,6 +11,10 @@ import (
 
 	_ "github.com/tursodatabase/libsql-client-go/libsql"
 )
+
+// ErrMetadataNotFound is returned (wrapped) by GetMetadata and its typed
+// helpers when no row exists for the film/type. Check with errors.Is.
+var ErrMetadataNotFound = errors.New("metadata not found")
 
 type TursoService struct {
 	db *sql.DB
@@ -87,8 +92,8 @@ func (s *TursoService) GetMetadata(filmID, metadataType string, dest interface{}
 	var jsonData string
 	err := s.db.QueryRow(query, filmID, metadataType).Scan(&jsonData)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return fmt.Errorf("metadata not found for film '%s' type '%s'", filmID, metadataType)
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("%w for film '%s' type '%s'", ErrMetadataNotFound, filmID, metadataType)
 		}
 		return fmt.Errorf("failed to get metadata: %v", err)
 	}

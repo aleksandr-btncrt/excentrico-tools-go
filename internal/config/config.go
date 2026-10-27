@@ -75,6 +75,9 @@ func Load() (*Config, error) {
 		cfg.GoogleCredentialsPath = "credentials.json"
 	}
 
+	if cfg.GoogleSheetID == "" {
+		return nil, fmt.Errorf("google_sheet_id is required in configuration")
+	}
 	if cfg.WordPressConfig.BaseURL == "" {
 		return nil, fmt.Errorf("wordpress base_url is required in configuration")
 	}

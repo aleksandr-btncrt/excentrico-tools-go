@@ -2,8 +2,8 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"log"
 	"os"
 	"regexp"
 	"strings"
@@ -98,26 +98,27 @@ func (a *App) Close() {
 }
 
 // ListWordPressMenus fetches available WordPress navigation menus
-func (a *App) ListWordPressMenus() ([]*services.WordPressMenu, error) {
+func (a *App) ListWordPressMenus(ctx context.Context) ([]*services.WordPressMenu, error) {
 	if a.wordpressService == nil {
 		return nil, fmt.Errorf("wordpress service not initialized")
 	}
-	return a.wordpressService.GetNavMenus()
+	return a.wordpressService.GetNavMenus(ctx)
 }
 
 // ProcessFilms processes films from the Google Sheet with optional year filtering
-func (a *App) ProcessFilms(year string, templateConfig services.TemplateData, metadata *models.Metadata) error {
+func (a *App) ProcessFilms(ctx context.Context, year string, templateConfig services.TemplateData, metadata *models.Metadata) error {
 	l := logger.Get()
 	op := l.StartOperation("process_films")
 	op.WithContext("year", year)
 	op.WithContext("google_sheet_id", a.config.GoogleSheetID)
 	
 	if a.config.GoogleSheetID == "" {
-		op.Fail("Google Sheet ID not configured", fmt.Errorf("please add 'google_sheet_id' to your configuration.json file"))
-		log.Fatal("Google Sheet ID is not configured. Please add 'google_sheet_id' to your configuration.json file.")
+		err := errors.New("google_sheet_id is not configured; add it to configuration.json")
+		op.Fail("Google Sheet ID not configured", err)
+		return err
 	}
 
-	data, err := a.sheetsService.ReadRange(a.config.GoogleSheetID, "TODO!A:ZZ")
+	data, err := a.sheetsService.ReadRange(ctx, a.config.GoogleSheetID, "TODO!A:ZZ")
 	if err != nil {
 		op.Fail("Failed to read data from Google Sheet", err)
 		return err
@@ -199,7 +200,7 @@ func (a *App) ProcessFilms(year string, templateConfig services.TemplateData, me
 	}
 
 	if len(filteredObjects) > 0 {
-		err := a.processFilteredObjects(filteredObjects, year, templateConfig, metadata)
+		err := a.processFilteredObjects(ctx, filteredObjects, year, templateConfig, metadata)
 		if err != nil {
 			op.Fail("Failed to process filtered objects", err)
 			return err
@@ -213,7 +214,7 @@ func (a *App) ProcessFilms(year string, templateConfig services.TemplateData, me
 }
 
 // processFilteredObjects processes the filtered film objects
-func (a *App) processFilteredObjects(filteredObjects []map[string]any, year string, templateConfig services.TemplateData, metadata *models.Metadata) error {
+func (a *App) processFilteredObjects(ctx context.Context, filteredObjects []map[string]any, year string, templateConfig services.TemplateData, metadata *models.Metadata) error {
 	l := logger.Get()
 	op := l.StartOperation("process_filtered_objects")
 	op.WithContext("total_films", len(filteredObjects))
@@ -228,6 +229,10 @@ func (a *App) processFilteredObjects(filteredObjects []map[string]any, year stri
 	var processedCount, successCount, errorCount int
 
 	for _, obj := range filteredObjects {
+		if err := ctx.Err(); err != nil {
+			op.Fail(fmt.Sprintf("Processing interrupted after %d of %d films", processedCount, len(filteredObjects)), err)
+			return err
+		}
 		processedCount++
 
 		filmName := "unnamed_film"
@@ -259,7 +264,7 @@ func (a *App) processFilteredObjects(filteredObjects []map[string]any, year stri
 			continue
 		}
 
-		if err := a.filmProcessor.ProcessSingleFilm(obj, baseDir, year, filmName, caption, templateConfig); err != nil {
+		if err := a.filmProcessor.ProcessSingleFilm(ctx, obj, baseDir, year, filmName, caption, templateConfig); err != nil {
 			filmOp.Fail(fmt.Sprintf("Failed to process film '%s'", filmName), err)
 			errorCount++
 		} else {

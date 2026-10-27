@@ -38,8 +38,8 @@ func NewGoogleDriveService(ctx context.Context, credentialsPath string) (*Google
 	}, nil
 }
 
-func (s *GoogleDriveService) DownloadFile(fileID, destinationPath string) error {
-	resp, err := s.service.Files.Get(fileID).Download()
+func (s *GoogleDriveService) DownloadFile(ctx context.Context, fileID, destinationPath string) error {
+	resp, err := s.service.Files.Get(fileID).Context(ctx).Download()
 	if err != nil {
 		return fmt.Errorf("failed to download file: %v", err)
 	}
@@ -66,8 +66,8 @@ func (s *GoogleDriveService) DownloadFile(fileID, destinationPath string) error 
 }
 
 // GetFileMetadata fetches metadata (id, name, mimeType) for a given file ID.
-func (s *GoogleDriveService) GetFileMetadata(fileID string) (*drive.File, error) {
-	file, err := s.service.Files.Get(fileID).Fields("id, name, mimeType").Do()
+func (s *GoogleDriveService) GetFileMetadata(ctx context.Context, fileID string) (*drive.File, error) {
+	file, err := s.service.Files.Get(fileID).Fields("id, name, mimeType").Context(ctx).Do()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get file metadata: %v", err)
 	}
@@ -76,8 +76,8 @@ func (s *GoogleDriveService) GetFileMetadata(fileID string) (*drive.File, error)
 }
 
 // DownloadFileBytes downloads the raw content of a file into memory.
-func (s *GoogleDriveService) DownloadFileBytes(fileID string) ([]byte, error) {
-	resp, err := s.service.Files.Get(fileID).Download()
+func (s *GoogleDriveService) DownloadFileBytes(ctx context.Context, fileID string) ([]byte, error) {
+	resp, err := s.service.Files.Get(fileID).Context(ctx).Download()
 	if err != nil {
 		return nil, fmt.Errorf("failed to download file: %v", err)
 	}
@@ -93,7 +93,7 @@ func (s *GoogleDriveService) DownloadFileBytes(fileID string) ([]byte, error) {
 
 // ListFiles returns every non-trashed file directly inside folderID,
 // following nextPageToken (the API returns at most one page per call).
-func (s *GoogleDriveService) ListFiles(folderID string) ([]*drive.File, error) {
+func (s *GoogleDriveService) ListFiles(ctx context.Context, folderID string) ([]*drive.File, error) {
 	query := fmt.Sprintf("'%s' in parents and trashed=false", folderID)
 
 	var all []*drive.File
@@ -106,7 +106,7 @@ func (s *GoogleDriveService) ListFiles(folderID string) ([]*drive.File, error) {
 		if pageToken != "" {
 			call = call.PageToken(pageToken)
 		}
-		files, err := call.Do()
+		files, err := call.Context(ctx).Do()
 		if err != nil {
 			return nil, fmt.Errorf("failed to list files: %v", err)
 		}

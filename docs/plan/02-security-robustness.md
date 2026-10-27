@@ -49,3 +49,15 @@ treats EOF as "no answer".
 ## 2.8 Unchecked multipart errors
 
 `writer.WriteField` / `writer.Close` errors are checked.
+
+## Details decided during implementation
+
+- `ProcessFilms` keeps a defensive empty-`google_sheet_id` check, but it
+  returns an error instead of exiting.
+- The film loop checks `ctx.Err()` before each film, so an interrupt ends the
+  run with "Processing interrupted after N of M films" rather than starting
+  the next film.
+- `Download` does not send the WordPress `Authorization` header: image URLs
+  may point at a CDN or another host.
+- Google Sheets `ReadRange` and the Drive service methods take a context too
+  (they are part of the same run).
