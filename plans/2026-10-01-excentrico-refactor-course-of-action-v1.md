@@ -80,11 +80,11 @@ Ground rule for every step: `go build ./... && go vet ./... && go test ./...` mu
 
 ### Step 7 — Structure: split and template-ise Divi rendering (PR: "refactor: split divi_template.go, text/template rendering")
 
-- [ ] 7.1 Split into `template_components.go`, `template_media.go`, `template_file.go` (types already moved in 1.1). Delete `RowComponent` and the no-op `if directorImage == ""` branch.
-- [ ] 7.2 Move each component's markup into `internal/services/templates/*.tmpl` with `//go:embed`; render via `text/template` with named fields.
-- [ ] 7.3 Golden test from 0.2 must produce a byte-identical string (whitespace normalisation allowed only if documented).
-- [ ] 7.4 Delete unused API: `UploadMedia`, `GetPost`, `GetPosts`, `DeletePost`, `GetTags`, `SearchTags`, `WriteRange`, `AppendRow`, `CreateSpreadsheet`, `GetSpreadsheet`. Extract `buildMultipart()` from `UploadMediaFromFile`.
-- [ ] 7.5 `go mod tidy`; remove the commented Bubble Tea block from `go.mod`.
+- [x] 7.1 Split into `template_components.go`, `template_media.go`, `template_file.go` (types already moved in 1.1). Delete `RowComponent` and the no-op `if directorImage == ""` branch.
+- [x] 7.2 Move each component's markup into `internal/services/templates/*.tmpl` with `//go:embed`; render via `text/template` with named fields.
+- [x] 7.3 Golden test from 0.2 must produce a byte-identical string (whitespace normalisation allowed only if documented). (Done: byte-identical, no whitespace normalisation needed.)
+- [x] 7.4 Delete unused API: `UploadMedia`, `GetPost`, `GetPosts`, `DeletePost`, `GetTags`, `SearchTags`, `WriteRange`, `AppendRow`, `CreateSpreadsheet`, `GetSpreadsheet`. Extract `buildMultipart()` from `UploadMediaFromFile`.
+- [x] 7.5 `go mod tidy`; remove the commented Bubble Tea block from `go.mod`.
 
 ### Step 8 — Tests, CI, docs (PR: "docs: README rewrite; ci: lint blocking, goreleaser")
 
