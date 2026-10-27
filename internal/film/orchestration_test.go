@@ -3,6 +3,7 @@ package film
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -82,6 +83,10 @@ func TestProcessSingleFilm_DirectorDeduplicatedAcrossFilms(t *testing.T) {
 	if p.wp.creates != 2 {
 		t.Errorf("CreatePost called %d times, want 2", p.wp.creates)
 	}
+	// One batched media lookup per film (plan 6.2).
+	if p.wp.fetches != 2 {
+		t.Errorf("FetchMedia called %d times, want 2 (one per film)", p.wp.fetches)
+	}
 	if len(p.drive.downloads) != 4 || p.resizer.calls != 4 {
 		t.Errorf("downloads = %d, resizes = %d; want 4 each", len(p.drive.downloads), p.resizer.calls)
 	}
@@ -136,6 +141,46 @@ func TestProcessSingleFilm_UpdatesExistingPost(t *testing.T) {
 	for _, name := range []string{"metadata.json", "divi_template.json"} {
 		if _, err := os.Stat(filepath.Join(filmDir, name)); err != nil {
 			t.Errorf("%s not written: %v", name, err)
+		}
+	}
+}
+
+// divi_template.json embeds every cached image only when EmbedImages is set;
+// otherwise "encoded" is empty and nothing is downloaded.
+func TestProcessSingleFilm_EmbedImages(t *testing.T) {
+	for _, embed := range []bool{false, true} {
+		p := newPipeline(t)
+		divi := services.NewDiviTemplateService()
+		divi.EmbedImages = embed
+		p.proc = NewProcessor(p.drive, p.resizer, p.wp, divi, p.store)
+		newFilmFolder(p.drive, "rootA", "Maya Deren")
+
+		res := p.run(t, testFilm("Film A", "Maya Deren", "rootA"))
+
+		b, err := os.ReadFile(filepath.Join(p.baseDir, "Film A", "divi_template.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var file struct {
+			Images map[string]services.DiviImageData `json:"images"`
+		}
+		if err := json.Unmarshal(b, &file); err != nil {
+			t.Fatal(err)
+		}
+		if len(file.Images) != res.Images {
+			t.Errorf("embed=%v: %d images in file, want %d", embed, len(file.Images), res.Images)
+		}
+		for u, img := range file.Images {
+			if (img.Encoded != "") != embed {
+				t.Errorf("embed=%v: image %s encoded=%q", embed, u, img.Encoded)
+			}
+		}
+		wantDownloads := 0
+		if embed {
+			wantDownloads = res.Images
+		}
+		if p.wp.downloads != wantDownloads {
+			t.Errorf("embed=%v: %d downloads, want %d", embed, p.wp.downloads, wantDownloads)
 		}
 	}
 }

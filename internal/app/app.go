@@ -90,6 +90,12 @@ func New(cfg *config.Config) (*App, error) {
 	}, nil
 }
 
+// SetEmbedImages controls whether divi_template.json embeds each image as
+// base64 (-embed-images).
+func (a *App) SetEmbedImages(embed bool) {
+	a.diviTemplateService.EmbedImages = embed
+}
+
 // Close cleans up resources
 func (a *App) Close() {
 	if a.tursoService != nil {

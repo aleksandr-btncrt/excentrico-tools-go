@@ -365,7 +365,14 @@ func CreateOrUpdateWordPressProject(ctx context.Context, wordpressService Client
 		slugText = "untitled-film"
 	}
 
-	_, _ = diviTemplateService.GenerateCompleteTemplate(ctx, film, imageIds, wordpressService, tursoService, filmID, year, templateConfig)
+	// One batched media lookup per film, shared by the featured-image,
+	// background and director selectors and divi_template.json.
+	mediaCache, err := wordpressService.FetchMedia(ctx, imageIds)
+	if err != nil {
+		op.Fail("Failed to fetch WordPress media", err)
+		return 0, fmt.Errorf("failed to fetch WordPress media: %w", err)
+	}
+	op.WithContext("cached_media_count", mediaCache.Len())
 
 	var categoryIDs []int
 	if film.Seccion != "" {
@@ -395,7 +402,7 @@ func CreateOrUpdateWordPressProject(ctx context.Context, wordpressService Client
 
 	// Try to set a featured image from the uploaded media
 	if len(imageIds) > 0 {
-		if featuredID := selectFeaturedMediaID(ctx, imageIds, wordpressService); featuredID > 0 {
+		if featuredID := selectFeaturedMediaID(imageIds, mediaCache); featuredID > 0 {
 			post.FeaturedMedia = featuredID
 		}
 	}
@@ -456,7 +463,9 @@ func CreateOrUpdateWordPressProject(ctx context.Context, wordpressService Client
 		// Don't return error here as this is not critical
 	}
 
-	if err := diviTemplateService.SaveDiviTemplateToFile(ctx, film, imageIds, wordpressService, tursoService, filmID, filmDir, year, metadata.PostID, templateConfig); err != nil {
+	// The template is generated once, only for divi_template.json.
+	_, shortcodes := diviTemplateService.GenerateCompleteTemplate(film, imageIds, mediaCache, tursoService, filmID, year, templateConfig)
+	if err := diviTemplateService.SaveDiviTemplateToFile(ctx, shortcodes, mediaCache, wordpressService, filmDir, metadata.PostID); err != nil {
 		op.Fail("Failed to save Divi template to file", err)
 		return 0, fmt.Errorf("failed to save Divi template to file: %v", err)
 	}
@@ -468,9 +477,9 @@ func CreateOrUpdateWordPressProject(ctx context.Context, wordpressService Client
 
 // selectFeaturedMediaID attempts to pick the most suitable featured image ID
 // Preference order by media title/filename/alt text contains: poster, portada, cover
-// Fallbacks to the first available image ID
-func selectFeaturedMediaID(ctx context.Context, imageIds []int, wordpressService services.MediaClient) int {
-	if wordpressService == nil || len(imageIds) == 0 {
+// Fallbacks to the first available image ID. Media is looked up in cache.
+func selectFeaturedMediaID(imageIds []int, cache *services.MediaCache) int {
+	if len(imageIds) == 0 {
 		return 0
 	}
 
@@ -478,29 +487,12 @@ func selectFeaturedMediaID(ctx context.Context, imageIds []int, wordpressService
 
 	// First pass: try to match preferred keywords
 	for _, id := range imageIds {
-		media, err := wordpressService.GetMedia(ctx, id)
-		if err != nil {
+		media, ok := cache.Get(id)
+		if !ok {
 			continue
 		}
-
-		title := strings.ToLower(media.Title.String())
-		alt := strings.ToLower(media.AltText)
-		filename := ""
-		if media.SourceURL != "" {
-			parts := strings.Split(media.SourceURL, "/")
-			if len(parts) > 0 {
-				filename = parts[len(parts)-1]
-				if dot := strings.LastIndex(filename, "."); dot != -1 {
-					filename = filename[:dot]
-				}
-				filename = strings.ToLower(filename)
-			}
-		}
-
-		for _, kw := range keywords {
-			if strings.Contains(title, kw) || strings.Contains(filename, kw) || strings.Contains(alt, kw) {
-				return id
-			}
+		if services.MediaMatchesAny(media, keywords) {
+			return id
 		}
 	}
 
