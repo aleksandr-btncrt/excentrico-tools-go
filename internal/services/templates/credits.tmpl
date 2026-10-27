@@ -1,0 +1,19 @@
+{{- /*
+  FICHA TÉCNICA body. Renders on a single line: every line break below is
+  trimmed by {{- ... }}. "Otros créditos", when present, replaces the
+  individual credit fields; it is pre-split on "." into OtherCreditsParts.
+*/ -}}
+{{define "credits"}}
+{{- if .DirectorNames}}<p><strong>Dirección:</strong> {{esc (join .DirectorNames ", ")}}</p>{{end}}
+{{- if .Credits.OtherCredits}}
+	{{- if .OtherCreditsParts}}<p>{{range $i, $p := .OtherCreditsParts}}{{if $i}}<br>{{end}}{{esc $p}}{{end}}</p>{{end}}
+{{- else}}
+	{{- with .Credits.Production}}<p><strong>Producción:</strong> {{esc .}}</p>{{end}}
+	{{- with .Credits.Script}}<p><strong>Guión:</strong> {{esc .}}</p>{{end}}
+	{{- with .Credits.Photography}}<p><strong>Cámara - Foto:</strong> {{esc .}}</p>{{end}}
+	{{- with .Credits.ArtDesign}}<p><strong>Arte - Diseño:</strong> {{esc .}}</p>{{end}}
+	{{- with .Credits.SoundMusic}}<p><strong>Sonido - Música:</strong> {{esc .}}</p>{{end}}
+	{{- with .Credits.Editing}}<p><strong>Edición:</strong> {{esc .}}</p>{{end}}
+	{{- with .Credits.Cast}}<p><strong>Intérpretes (especificar pronombres para subtítulos):</strong> {{esc .}}</p>{{end}}
+{{- end}}
+{{- end}}

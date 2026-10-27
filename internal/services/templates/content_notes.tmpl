@@ -1,0 +1,7 @@
+{{define "content_notes"}}{{if .ContentNotes}}
+	[et_pb_text disabled_on="{{.NdcProps.Text.DisabledOn}}" _builder_version="{{.BuilderVersion}}" {{.ModulePresetDefault}} text_font="{{.FontBold}}" text_text_color="{{.NdcProps.Text.Color}}" background_color="{{.NdcProps.Text.BackgroundColor}}" custom_margin="{{.MarginStandard}}" custom_padding="{{.PaddingNotes}}" {{.BoxShadowPreset3}} box_shadow_color="{{.NdcProps.Text.BoxShadowColor}}" locked="off" {{.GlobalColorsInfo}}]
+		<p>
+			<strong>NdC: <span data-sheets-root="1">{{esc .ContentNotes}}</span><br />
+			</strong>
+		</p>
+	[/et_pb_text]{{end}}{{end}}

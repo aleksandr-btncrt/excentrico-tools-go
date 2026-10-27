@@ -1,0 +1,22 @@
+{{define "main_content"}}
+	[et_pb_section fb_built="1" _builder_version="{{.BuilderVersion}}" background_color="{{.SectionProps.Background}}" use_background_color_gradient="on" background_color_gradient_stops="{{.SectionProps.BackgroundColorGradientStops}}" background_color_gradient_start="{{.SectionProps.BackgroundColorGradientStart}}" background_color_gradient_end="{{.SectionProps.BackgroundColorGradientEnd}}"]
+		[et_pb_row column_structure="1_2,1_2" _builder_version="{{.BuilderVersion}}" {{.GlobalColorsInfo}}]	
+			[et_pb_column type="1_2" _builder_version="{{.BuilderVersion}}" {{.GlobalColorsInfo}}]
+				[et_pb_text _builder_version="{{.BuilderVersion}}" text_font_size="15px" header_4_font="{{.FontBoldCaps}}" header_4_text_color="{{.TextProps.Header4TextColor}}" header_4_font_size="19px" background_color="{{.ColorWhite}}" max_height_tablet="" max_height_phone="" max_height_last_edited="on|desktop" custom_padding="{{.PaddingStandard}}" {{.BoxShadowPreset3}} box_shadow_color="{{.TextProps.BoxShadowColor}}" {{.GlobalColorsInfo}}]
+					<h4><strong>FICHA TÉCNICA:</strong></h4>
+					{{.CreditsHTML}}
+				[/et_pb_text]
+			[/et_pb_column]
+			[et_pb_column type="1_2" _builder_version="{{.BuilderVersion}}" {{.GlobalColorsInfo}}]
+				[et_pb_text _builder_version="{{.BuilderVersion}}" text_font_size="15px" header_4_font="{{.FontBoldCaps}}" header_4_text_color="{{.TextProps.Header4TextColor}}" header_4_font_size="19px" background_color="{{.ColorWhite}}" custom_padding="{{.PaddingStandard}}" {{.BoxShadowPreset3}} box_shadow_color="{{.TextProps.BoxShadowColor}}" {{.GlobalColorsInfo}}]
+					<h4><strong>SINOPSIS:</strong></h4>
+					<p class="p1">
+						<span data-sheets-root="1">{{esc .Synopsis}}</span>
+					</p>
+				[/et_pb_text]
+				{{.ContentNotesHTML}}
+			[/et_pb_column]
+		[/et_pb_row]
+		{{.DirectorsHTML}}
+		{{.GalleryHTML}}
+	[/et_pb_section]{{end}}

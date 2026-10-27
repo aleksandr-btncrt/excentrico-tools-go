@@ -54,8 +54,23 @@ Implementation notes (Step 5):
   rendered with `text/template` using named fields instead of 60-argument
   `Sprintf` calls.
 
-The golden test (`testdata/golden_2026.txt`) guarantees byte-identical
-output.
+- `divi_template.go` — the service, shared constants, film data types and
+  template composition (`GenerateDiviTemplateData`,
+  `CreateStandardFilmTemplate`).
+
+Templates are not auto-escaped (`text/template`, not `html/template`, since
+the output is Divi shortcodes): they call `esc` (`html.EscapeString`) on
+sheet text exactly where the old `Sprintf` code escaped it. Shared constants
+are exposed under their Go names through `DiviConsts`
+(`{{.BuilderVersion}}`, `{{.ColorPrimary}}`, ...). Each `.tmpl` file holds
+one `{{define}}` block, so trailing newlines in the files do not leak into
+the output.
+
+Status: done in Step 7. Both golden files (`testdata/golden_2026.txt`,
+`testdata/golden_2026_other_credits.txt`) are byte-identical without any
+whitespace normalisation; `template_components_test.go` covers the branches
+the golden files do not (empty credits, "Otros créditos" with no sentences,
+no directors, director without image).
 
 ## 4.4 Dead code
 

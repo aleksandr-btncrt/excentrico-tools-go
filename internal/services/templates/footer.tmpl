@@ -1,0 +1,33 @@
+{{define "footer"}}
+	[et_pb_section fb_built="1" admin_label="Section" _builder_version="{{.BuilderVersion}}" background_image="{{.FooterProps.Section.BackgroundImage}}" background_position="{{.FooterProps.Section.BackgroundPosition}}" min_height="294.8px" custom_margin="||||false|false" custom_padding="||||false|false" global_module="{{.FooterProps.Section.GlobalModule}}" saved_tabs="all" {{.GlobalColorsInfo}}]
+		[et_pb_row disabled_on="off|off|off" _builder_version="4.23.2" {{.ModulePresetDefault}} min_height="164.4px" {{.GlobalColorsInfo}}]
+			[et_pb_column type="4_4" _builder_version="4.17.4" {{.ModulePresetDefault}} {{.GlobalColorsInfo}}]
+				[et_pb_button button_url="@ET-DC@eyJkeW5hbWljIjp0cnVlLCJjb250ZW50IjoicG9zdF9saW5rX3VybF9wYWdlIiwic2V0dGluZ3MiOnsicG9zdF9pZCI6IjEwNDI0In19@" button_text="{{.ButtonText}}" button_alignment="center" disabled_on="on|on|on" module_class="popmake-6500" _builder_version="{{.BuilderVersion}}" _dynamic_attributes="button_url" {{.ModulePresetDefault}} {{.CustomButtonOn}} button_text_color="{{.FooterProps.Button.ButtonTextColor}}" button_bg_color="{{.FooterProps.Button.ButtonBgColor}}" button_border_color="{{.FooterProps.Button.ButtonBorderColor}}" button_font="{{.FontBold}}" button_icon_color="{{.FooterProps.Button.ButtonIconColor}}" {{.BoxShadowPreset3}} box_shadow_color="{{.FooterProps.Button.BoxShadowColor}}" disabled="on" {{.GlobalColorsInfo}} button_text_color__hover_enabled="on|desktop" button_text_color__hover="{{.ColorYellow}}" button_bg_color__hover_enabled="on|hover" button_bg_color__hover="{{.ColorCoral}}" button_bg_enable_color__hover="on" button_border_color__hover_enabled="on|hover" button_border_color__hover="{{.ColorCoral}}"]
+				[/et_pb_button]
+			[/et_pb_column]
+		[/et_pb_row]
+		[et_pb_row column_structure="1_3,1_3,1_3" _builder_version="{{.BuilderVersion}}" {{.GlobalColorsInfo}}]\
+			[et_pb_column type="1_3" _builder_version="{{.BuilderVersion}}" {{.GlobalColorsInfo}}]
+				[et_pb_social_media_follow icon_color="{{.ColorPrimary}}" icon_color_tablet="{{.ColorPink}}" icon_color_phone="{{.ColorPink}}" icon_color_last_edited="on|tablet" _builder_version="{{.BuilderVersion}}" background_color="RGBA(255,255,255,0)" {{.CustomButtonOn}} button_text_color="{{.ColorPrimary}}" button_bg_color="{{.ColorSecondary}}" button_border_color="{{.ColorSecondary}}" text_orientation="center" custom_margin="||||false|false" {{.GlobalColorsInfo}}]
+					[et_pb_social_media_follow_network social_network="facebook" url="{{.URLFacebook}}" icon_color="{{.ColorPrimary}}" _builder_version="{{.BuilderVersion}}" background_color="{{.ColorSecondary}}" {{.BackgroundColorOn}} {{.GlobalColorsInfo}}]
+						facebook
+					[/et_pb_social_media_follow_network]
+					[et_pb_social_media_follow_network social_network="instagram" url="{{.URLInstagram}}" icon_color="{{.ColorPrimary}}" _builder_version="{{.BuilderVersion}}" background_color="{{.ColorSecondary}}" {{.BackgroundColorOn}} {{.GlobalColorsInfo}}]
+						instagram
+					[/et_pb_social_media_follow_network]
+					[et_pb_social_media_follow_network social_network="twitter" url="{{.URLTwitter}}" icon_color="{{.ColorPrimary}}" _builder_version="{{.BuilderVersion}}" background_color="{{.ColorSecondary}}" {{.BackgroundColorOn}} {{.GlobalColorsInfo}}]
+						twitter
+					[/et_pb_social_media_follow_network]
+				[/et_pb_social_media_follow]
+			[/et_pb_column]
+			[et_pb_column type="1_3" _builder_version="{{.BuilderVersion}}" {{.GlobalColorsInfo}}]
+				[et_pb_text _builder_version="{{.BuilderVersion}}" text_text_color="{{.ColorYellow}}" link_font="{{.FontBold}}" link_text_color="{{.ColorDark}}" header_text_color="{{.ColorDark}}" text_orientation="center" text_text_align="center" {{.GlobalColorsInfo}} link_text_color__hover_enabled="on|desktop"]
+					<p><span style="color: {{.ColorDark}};"><strong><a href="mailto:{{.EmailContact}}" target="_blank" rel="noopener noreferrer" style="color: {{.ColorDark}};">{{.EmailContact}}</a></strong></span></p>
+				[/et_pb_text]
+			[/et_pb_column]
+			[et_pb_column type="1_3" _builder_version="{{.BuilderVersion}}" {{.GlobalColorsInfo}}]
+				[et_pb_search button_color="{{.ColorPrimary}}" placeholder_color="{{.ColorPrimary}}" _builder_version="{{.BuilderVersion}}" form_field_background_color="RGBA(255,255,255,0)" form_field_text_color="{{.ColorDark}}" form_field_focus_background_color="RGBA(255,255,255,0)" form_field_focus_text_color="{{.ColorDark}}" button_font="{{.FontExtraBold}}" button_text_color="{{.ColorSecondary}}" button_font_size="12px" form_field_font_size="12px" background_color="rgba(0,0,0,0)" background_last_edited="on|phone" border_width_all="3px" border_color_all="{{.ColorPrimary}}" {{.GlobalColorsInfo}} background__hover_enabled="on|desktop"]
+				[/et_pb_search]
+			[/et_pb_column]
+		[/et_pb_row]
+	[/et_pb_section]{{end}}

@@ -264,149 +264,6 @@ func (s *WordPressService) UpdatePost(ctx context.Context, postID int, post *Wor
 	return &updatedPost, nil
 }
 
-func (s *WordPressService) GetPost(ctx context.Context, postID int) (*WordPressPost, error) {
-	resp, err := s.makeRequest(ctx, "GET", fmt.Sprintf("/wp/v2/project/%d", postID), nil)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	var post WordPressPost
-	if err := json.NewDecoder(resp.Body).Decode(&post); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %v", err)
-	}
-
-	return &post, nil
-}
-
-func (s *WordPressService) GetPosts(ctx context.Context, params map[string]string) ([]*WordPressPost, error) {
-	query := url.Values{}
-	for key, value := range params {
-		query.Set(key, value)
-	}
-
-	endpoint := "/wp/v2/project"
-	if len(query) > 0 {
-		endpoint += "?" + query.Encode()
-	}
-
-	resp, err := s.makeRequest(ctx, "GET", endpoint, nil)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	var posts []*WordPressPost
-	if err := json.NewDecoder(resp.Body).Decode(&posts); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %v", err)
-	}
-
-	return posts, nil
-}
-
-func (s *WordPressService) DeletePost(ctx context.Context, postID int) error {
-	resp, err := s.makeRequest(ctx, "DELETE", fmt.Sprintf("/wp/v2/project/%d", postID), nil)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	return nil
-}
-
-func (s *WordPressService) UploadMedia(ctx context.Context, file *multipart.FileHeader, title, altText string) (*WordPressMedia, error) {
-	// Log HTTP request with multipart payload info
-	l := logger.Get()
-	op := l.StartOperation("wordpress_upload_media")
-	op.WithContext("http_method", "POST")
-	op.WithContext("http_url", s.baseURL+"/wp-json/wp/v2/media")
-	op.WithContext("http_endpoint", "/wp/v2/media")
-	op.WithContext("http_request_payload_type", "multipart/form-data")
-	op.WithContext("http_request_payload_file_name", file.Filename)
-	op.WithContext("http_request_payload_file_size", file.Size)
-	op.WithContext("http_request_payload_title", title)
-	op.WithContext("http_request_payload_alt_text", altText)
-
-	fileReader, err := file.Open()
-	if err != nil {
-		op.Fail("Failed to open file", err)
-		return nil, fmt.Errorf("failed to open file: %v", err)
-	}
-	defer fileReader.Close()
-
-	var buf bytes.Buffer
-	writer := multipart.NewWriter(&buf)
-
-	part, err := writer.CreateFormFile("file", file.Filename)
-	if err != nil {
-		op.Fail("Failed to create form file", err)
-		return nil, fmt.Errorf("failed to create form file: %v", err)
-	}
-
-	_, err = io.Copy(part, fileReader)
-	if err != nil {
-		op.Fail("Failed to copy file data", err)
-		return nil, fmt.Errorf("failed to copy file data: %v", err)
-	}
-
-	if title != "" {
-		if err := writer.WriteField("title", title); err != nil {
-			op.Fail("Failed to write title field", err)
-			return nil, fmt.Errorf("failed to write title field: %w", err)
-		}
-	}
-
-	if altText != "" {
-		if err := writer.WriteField("alt_text", altText); err != nil {
-			op.Fail("Failed to write alt_text field", err)
-			return nil, fmt.Errorf("failed to write alt_text field: %w", err)
-		}
-	}
-
-	if err := writer.Close(); err != nil {
-		op.Fail("Failed to finalize multipart body", err)
-		return nil, fmt.Errorf("failed to finalize multipart body: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", s.baseURL+"/wp-json/wp/v2/media", &buf)
-	if err != nil {
-		op.Fail("Failed to create HTTP request", err)
-		return nil, fmt.Errorf("failed to create request: %v", err)
-	}
-
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-	req.Header.Set("Authorization", s.authHeader)
-
-	resp, err := s.client.Do(req)
-	if err != nil {
-		op.WithContext("http_status_code", 0)
-		op.Fail("HTTP request failed", err)
-		return nil, fmt.Errorf("failed to make request: %v", err)
-	}
-	defer resp.Body.Close()
-
-	op.WithContext("http_status_code", resp.StatusCode)
-
-	if resp.StatusCode != http.StatusCreated {
-		body, _ := io.ReadAll(resp.Body)
-		bodyStr := truncateForLog(body)
-		op.WithContext("http_response_body", bodyStr)
-		op.Fail(fmt.Sprintf("Upload failed with status %d", resp.StatusCode), fmt.Errorf("%s", bodyStr))
-		return nil, fmt.Errorf("upload failed with status %d: %s", resp.StatusCode, bodyStr)
-	}
-
-	var media WordPressMedia
-	if err := json.NewDecoder(resp.Body).Decode(&media); err != nil {
-		op.Fail("Failed to decode response", err)
-		return nil, fmt.Errorf("failed to decode response: %v", err)
-	}
-
-	op.WithWordPress(0, media.ID, "")
-	op.WithContext("http_response_media_id", media.ID)
-	op.Complete(fmt.Sprintf("Uploaded media: %s (ID: %d)", media.Title.String(), media.ID))
-	return &media, nil
-}
-
 func (s *WordPressService) UploadMediaFromFile(ctx context.Context, filePath, title, altText string) (*WordPressMedia, error) {
 	// Log HTTP request with multipart payload info
 	l := logger.Get()
@@ -435,47 +292,19 @@ func (s *WordPressService) UploadMediaFromFile(ctx context.Context, filePath, ti
 	op.WithContext("http_request_payload_file_name", fileInfo.Name())
 	op.WithContext("http_request_payload_file_size", fileInfo.Size())
 
-	var buf bytes.Buffer
-	writer := multipart.NewWriter(&buf)
-
-	part, err := writer.CreateFormFile("file", fileInfo.Name())
+	body, contentType, err := buildMultipart(file, fileInfo.Name(), title, altText)
 	if err != nil {
-		op.Fail("Failed to create form file", err)
-		return nil, fmt.Errorf("failed to create form file: %v", err)
+		op.Fail("Failed to build multipart body", err)
+		return nil, err
 	}
 
-	_, err = io.Copy(part, file)
-	if err != nil {
-		op.Fail("Failed to copy file data", err)
-		return nil, fmt.Errorf("failed to copy file data: %v", err)
-	}
-
-	if title != "" {
-		if err := writer.WriteField("title", title); err != nil {
-			op.Fail("Failed to write title field", err)
-			return nil, fmt.Errorf("failed to write title field: %w", err)
-		}
-	}
-
-	if altText != "" {
-		if err := writer.WriteField("alt_text", altText); err != nil {
-			op.Fail("Failed to write alt_text field", err)
-			return nil, fmt.Errorf("failed to write alt_text field: %w", err)
-		}
-	}
-
-	if err := writer.Close(); err != nil {
-		op.Fail("Failed to finalize multipart body", err)
-		return nil, fmt.Errorf("failed to finalize multipart body: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", s.baseURL+"/wp-json/wp/v2/media", &buf)
+	req, err := http.NewRequestWithContext(ctx, "POST", s.baseURL+"/wp-json/wp/v2/media", body)
 	if err != nil {
 		op.Fail("Failed to create HTTP request", err)
 		return nil, fmt.Errorf("failed to create request: %v", err)
 	}
 
-	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.Header.Set("Content-Type", contentType)
 	req.Header.Set("Authorization", s.authHeader)
 
 	resp, err := s.client.Do(req)
@@ -508,6 +337,36 @@ func (s *WordPressService) UploadMediaFromFile(ctx context.Context, filePath, ti
 	return &media, nil
 }
 
+// buildMultipart builds the POST /wp/v2/media form body: the file content
+// under "file" plus optional "title" and "alt_text" fields. It returns the
+// body and its Content-Type (with boundary).
+func buildMultipart(file io.Reader, fileName, title, altText string) (*bytes.Buffer, string, error) {
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+
+	part, err := writer.CreateFormFile("file", fileName)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to create form file: %w", err)
+	}
+	if _, err := io.Copy(part, file); err != nil {
+		return nil, "", fmt.Errorf("failed to copy file data: %w", err)
+	}
+	if title != "" {
+		if err := writer.WriteField("title", title); err != nil {
+			return nil, "", fmt.Errorf("failed to write title field: %w", err)
+		}
+	}
+	if altText != "" {
+		if err := writer.WriteField("alt_text", altText); err != nil {
+			return nil, "", fmt.Errorf("failed to write alt_text field: %w", err)
+		}
+	}
+	if err := writer.Close(); err != nil {
+		return nil, "", fmt.Errorf("failed to finalize multipart body: %w", err)
+	}
+	return &buf, writer.FormDataContentType(), nil
+}
+
 func (s *WordPressService) SearchCategories(ctx context.Context, year string) ([]*WordPressCategory, error) {
 
 	query := url.Values{}
@@ -528,42 +387,6 @@ func (s *WordPressService) SearchCategories(ctx context.Context, year string) ([
 	}
 
 	return categories, nil
-}
-
-func (s *WordPressService) GetTags(ctx context.Context) ([]*WordPressTag, error) {
-	resp, err := s.makeRequest(ctx, "GET", "/wp/v2/tags", nil)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	var tags []*WordPressTag
-	if err := json.NewDecoder(resp.Body).Decode(&tags); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %v", err)
-	}
-
-	return tags, nil
-}
-
-func (s *WordPressService) SearchTags(ctx context.Context, searchText string) ([]*WordPressTag, error) {
-
-	query := url.Values{}
-	query.Set("search", searchText)
-
-	endpoint := "/wp/v2/tags?" + query.Encode()
-
-	resp, err := s.makeRequest(ctx, "GET", endpoint, nil)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	var tags []*WordPressTag
-	if err := json.NewDecoder(resp.Body).Decode(&tags); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %v", err)
-	}
-
-	return tags, nil
 }
 
 func (s *WordPressService) GetMedia(ctx context.Context, mediaID int) (*WordPressMedia, error) {

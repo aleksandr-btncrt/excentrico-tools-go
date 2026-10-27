@@ -1,7 +1,11 @@
 package services
 
 import (
+	"io"
+	"mime"
+	"mime/multipart"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -33,6 +37,50 @@ func TestMatchCategory(t *testing.T) {
 		if gotID != tt.wantID {
 			t.Errorf("matchCategory(%q) = %d, want %d", tt.name, gotID, tt.wantID)
 		}
+	}
+}
+
+func TestBuildMultipart(t *testing.T) {
+	parse := func(t *testing.T, title, alt string) map[string]string {
+		t.Helper()
+		body, contentType, err := buildMultipart(strings.NewReader("JPEGDATA"), "still_web.jpg", title, alt)
+		if err != nil {
+			t.Fatal(err)
+		}
+		mediaType, params, err := mime.ParseMediaType(contentType)
+		if err != nil || mediaType != "multipart/form-data" {
+			t.Fatalf("content type %q: %v", contentType, err)
+		}
+		parts := map[string]string{}
+		r := multipart.NewReader(body, params["boundary"])
+		for {
+			p, err := r.NextPart()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			b, _ := io.ReadAll(p)
+			key := p.FormName()
+			if p.FileName() != "" {
+				key += ":" + p.FileName()
+			}
+			parts[key] = string(b)
+		}
+		return parts
+	}
+
+	got := parse(t, "Still", "A still")
+	want := map[string]string{"file:still_web.jpg": "JPEGDATA", "title": "Still", "alt_text": "A still"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("parts = %v, want %v", got, want)
+	}
+
+	got = parse(t, "", "")
+	want = map[string]string{"file:still_web.jpg": "JPEGDATA"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("without title/alt: parts = %v, want %v", got, want)
 	}
 }
 
