@@ -106,7 +106,7 @@ func (a *App) ListWordPressMenus() ([]*services.WordPressMenu, error) {
 }
 
 // ProcessFilms processes films from the Google Sheet with optional year filtering
-func (a *App) ProcessFilms(year string, templateConfig *services.TemplateData, metadata *models.Metadata) error {
+func (a *App) ProcessFilms(year string, templateConfig services.TemplateData, metadata *models.Metadata) error {
 	l := logger.Get()
 	op := l.StartOperation("process_films")
 	op.WithContext("year", year)
@@ -216,7 +216,7 @@ func (a *App) ProcessFilms(year string, templateConfig *services.TemplateData, m
 }
 
 // processFilteredObjects processes the filtered film objects
-func (a *App) processFilteredObjects(filteredObjects []map[string]any, year string, templateConfig *services.TemplateData, metadata *models.Metadata) error {
+func (a *App) processFilteredObjects(filteredObjects []map[string]any, year string, templateConfig services.TemplateData, metadata *models.Metadata) error {
 	l := logger.Get()
 	op := l.StartOperation("process_filtered_objects")
 	op.WithContext("total_films", len(filteredObjects))

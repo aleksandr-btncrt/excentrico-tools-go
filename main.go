@@ -17,10 +17,11 @@ import (
 )
 
 type RuntimeOptions struct {
-	Menu     string
-	Year     string
-	Template string
-	NavMenu  string
+	Menu         string
+	Year         string
+	Template     string
+	TemplatePath string
+	NavMenu      string
 }
 
 func main() {
@@ -29,6 +30,7 @@ func main() {
 	debugFlag := flag.Bool("debug", false, "Enable debug logging")
 	menuFlag := flag.String("menu", "", "Action to run: configuration | process")
 	navMenuFlag := flag.String("nav-menu", "", "Navigation menu to use (from WordPress)")
+	templateFlag := flag.String("template", "", "Path to a template JSON file (required when -year is not given)")
 	flag.Parse()
 
 	// Initialize logger
@@ -83,9 +85,10 @@ func main() {
 
 	// Collect runtime options (from flags or interactive prompts)
 	runtime := &RuntimeOptions{
-		Menu:    strings.TrimSpace(*menuFlag),
-		Year:    strings.TrimSpace(*yearFlag),
-		NavMenu: strings.TrimSpace(*navMenuFlag),
+		Menu:         strings.TrimSpace(*menuFlag),
+		Year:         strings.TrimSpace(*yearFlag),
+		NavMenu:      strings.TrimSpace(*navMenuFlag),
+		TemplatePath: strings.TrimSpace(*templateFlag),
 	}
 
 	// Back-compat: if -nav-menu was provided, use it as the template (menu slug)
@@ -120,22 +123,12 @@ func main() {
 		runtime.Year = promptString("Year filter (enter to skip)")
 	}
 
-	// Search for and load year-based template configuration
-	var templateConfig *services.TemplateData
-	if runtime.Year != "" {
-		templateConfig = loadYearTemplateConfig(runtime.Year, l)
-		if templateConfig != nil {
-			op := l.StartOperation("load_template_config")
-			op.WithContext("year", runtime.Year)
-			op.WithContext("template_path", fmt.Sprintf("templates/%s.json", runtime.Year))
-			op.Complete(fmt.Sprintf("Loaded template configuration for year %s", runtime.Year))
-		} else {
-			op := l.StartOperation("load_template_config")
-			op.WithContext("year", runtime.Year)
-			op.Warn(&logger.WideEvent{
-				Message: fmt.Sprintf("No template configuration found for year %s", runtime.Year),
-			})
-		}
+	// Load the template configuration. A missing or invalid template is fatal:
+	// processing without one used to panic halfway through a run.
+	templateConfig, err := loadTemplateConfig(runtime.TemplatePath, runtime.Year, l)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
 	}
 
 	var metadata = loadMetadata(runtime.Year, l)
@@ -303,44 +296,30 @@ func runConfigurationMenu() {
 	fmt.Println("Exiting configuration menu.")
 }
 
-// loadYearTemplateConfig searches for and loads a JSON template configuration file
-// based on the provided year from the templates folder
-func loadYearTemplateConfig(year string, l *logger.Logger) *services.TemplateData {
-	if year == "" {
-		return nil
+// loadTemplateConfig loads the Divi template configuration. An explicit path
+// (-template) wins; otherwise templates/<year>.json is used. The file is
+// decoded strictly and validated, and any problem is returned as an error.
+func loadTemplateConfig(explicitPath, year string, l *logger.Logger) (services.TemplateData, error) {
+	templatePath := explicitPath
+	if templatePath == "" {
+		if year == "" {
+			return services.TemplateData{}, fmt.Errorf("no template configuration: pass -year <year> (uses templates/<year>.json) or -template <path>")
+		}
+		templatePath = filepath.Join("templates", year+".json")
 	}
 
 	op := l.StartOperation("load_template_config")
 	op.WithContext("year", year)
-	
-	// Construct the template file path
-	templatePath := filepath.Join("templates", year+".json")
 	op.WithContext("template_path", templatePath)
 
-	// Check if the file exists
-	if _, err := os.Stat(templatePath); os.IsNotExist(err) {
-		op.Warn(&logger.WideEvent{
-			Message: fmt.Sprintf("Template file not found: %s", templatePath),
-		})
-		return nil
-	}
-
-	// Read the template file
-	data, err := os.ReadFile(templatePath)
+	templateConfig, err := services.LoadTemplateData(templatePath)
 	if err != nil {
-		op.Fail(fmt.Sprintf("Failed to read template file %s", templatePath), err)
-		return nil
+		op.Fail("Failed to load template configuration", err)
+		return services.TemplateData{}, err
 	}
 
-	// Parse the JSON
-	var templateConfig *services.TemplateData
-	if err := json.Unmarshal(data, &templateConfig); err != nil {
-		op.Fail(fmt.Sprintf("Failed to parse template file %s", templatePath), err)
-		return nil
-	}
-
-	op.Complete(fmt.Sprintf("Successfully loaded template configuration from %s", templatePath))
-	return templateConfig
+	op.Complete(fmt.Sprintf("Loaded template configuration from %s", templatePath))
+	return templateConfig, nil
 }
 
 

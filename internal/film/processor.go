@@ -39,7 +39,7 @@ func NewProcessor(
 }
 
 // ProcessSingleFilm processes a single film from the Google Sheet data
-func (p *Processor) ProcessSingleFilm(obj map[string]any, baseDir string, year string, filmName string, templateConfig *services.TemplateData) error {
+func (p *Processor) ProcessSingleFilm(obj map[string]any, baseDir string, year string, filmName string, templateConfig services.TemplateData) error {
 	l := logger.Get()
 	op := l.StartOperation("process_single_film")
 	

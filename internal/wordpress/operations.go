@@ -334,7 +334,7 @@ func UploadMediaToWordPress(wordpressService *services.WordPressService, tursoSe
 }
 
 // CreateOrUpdateWordPressProject creates or updates a WordPress project
-func CreateOrUpdateWordPressProject(wordpressService *services.WordPressService, diviTemplateService *services.DiviTemplateService, tursoService *services.TursoService, filmDir string, filmData map[string]any, year string, imageIds []int, templateConfig *services.TemplateData) error {
+func CreateOrUpdateWordPressProject(wordpressService *services.WordPressService, diviTemplateService *services.DiviTemplateService, tursoService *services.TursoService, filmDir string, filmData map[string]any, year string, imageIds []int, templateConfig services.TemplateData) error {
 	l := logger.Get()
 	op := l.StartOperation("create_update_wordpress_project")
 	
