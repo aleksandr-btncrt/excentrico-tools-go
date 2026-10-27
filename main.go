@@ -13,15 +13,16 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
 type RuntimeOptions struct {
 	Menu         string
 	Year         string
-	Template     string
 	TemplatePath string
-	NavMenu      string
+	// MenuSlug is the WordPress navigation menu slug (-menu-slug / -nav-menu).
+	MenuSlug string
 }
 
 func main() {
@@ -29,7 +30,8 @@ func main() {
 	yearFlag := flag.String("year", "", "Filter by year (e.g., 2024, 2025)")
 	debugFlag := flag.Bool("debug", false, "Enable debug logging")
 	menuFlag := flag.String("menu", "", "Action to run: configuration | process")
-	navMenuFlag := flag.String("nav-menu", "", "Navigation menu to use (from WordPress)")
+	menuSlugFlag := flag.String("menu-slug", "", "WordPress navigation menu slug; its ID overrides menu.menu_id from the template")
+	flag.StringVar(menuSlugFlag, "nav-menu", "", "Deprecated alias for -menu-slug")
 	templateFlag := flag.String("template", "", "Path to a template JSON file (required when -year is not given)")
 	flag.Parse()
 
@@ -87,13 +89,8 @@ func main() {
 	runtime := &RuntimeOptions{
 		Menu:         strings.TrimSpace(*menuFlag),
 		Year:         strings.TrimSpace(*yearFlag),
-		NavMenu:      strings.TrimSpace(*navMenuFlag),
+		MenuSlug:     strings.TrimSpace(*menuSlugFlag),
 		TemplatePath: strings.TrimSpace(*templateFlag),
-	}
-
-	// Back-compat: if -nav-menu was provided, use it as the template (menu slug)
-	if runtime.Template == "" && runtime.NavMenu != "" {
-		runtime.Template = runtime.NavMenu
 	}
 
 	if runtime.Menu == "" {
@@ -133,69 +130,6 @@ func main() {
 
 	var metadata = loadMetadata(runtime.Year, l)
 
-	if runtime.Template == "" {
-		// Fetch WordPress menus and select one as the template (menu slug)
-		op := l.StartOperation("list_wordpress_menus")
-		applicationTmp, err := app.New(cfg)
-		if err != nil {
-			op.Fail("Failed to initialize application for menu listing", err)
-		} else {
-			defer applicationTmp.Close()
-			var menus []*services.WordPressMenu
-			menus, err = applicationTmp.ListWordPressMenus()
-			if err != nil {
-				op.Fail("Failed to fetch WordPress menus", err)
-			} else {
-				op.WithContext("menu_count", len(menus))
-				op.WithContext("year_filter", runtime.Year)
-				op.Complete(fmt.Sprintf("Fetched %d WordPress menus", len(menus)))
-			}
-			if len(menus) > 0 {
-				display := menus
-				if strings.TrimSpace(runtime.Year) != "" {
-					yearLower := strings.ToLower(runtime.Year)
-					var filtered []*services.WordPressMenu
-					for _, m := range menus {
-						if strings.Contains(strings.ToLower(m.Slug), yearLower) || strings.Contains(strings.ToLower(m.Name), yearLower) {
-							filtered = append(filtered, m)
-						}
-					}
-					if len(filtered) > 0 {
-						display = filtered
-						fmt.Printf("Available WordPress menus matching year '%s':\n", runtime.Year)
-					} else {
-						fmt.Printf("No menus matched year '%s'. Showing all menus:\n", runtime.Year)
-					}
-				} else {
-					fmt.Println("Available WordPress menus:")
-				}
-
-				for idx, m := range display {
-					fmt.Printf("  %d) %s (%s)\n", idx+1, m.Name, m.Slug)
-				}
-				choice := promptString("Enter choice number or slug (enter to type slug manually)")
-				choiceLower := strings.ToLower(strings.TrimSpace(choice))
-				if choiceLower != "" {
-					var num int
-					if _, err := fmt.Sscanf(choiceLower, "%d", &num); err == nil {
-						if num >= 1 && num <= len(display) {
-							runtime.Template = display[num-1].Slug
-						}
-					} else {
-						for _, m := range display {
-							if strings.EqualFold(m.Slug, choiceLower) || strings.EqualFold(m.Name, choice) {
-								runtime.Template = m.Slug
-								break
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-
-	// No separate nav menu prompt; template now represents the selected WP menu
-
 	op := l.StartOperation("initialize_application")
 	application, err := app.New(cfg)
 	if err != nil {
@@ -205,28 +139,39 @@ func main() {
 	op.Complete("Application initialized successfully")
 	defer application.Close()
 
-	if strings.TrimSpace(runtime.Template) == "" {
-		op := l.StartOperation("process_films")
-		op.Fail("No WordPress menu selected", fmt.Errorf("aborting"))
-		return
+	// Pick the WordPress navigation menu (from -menu-slug or interactively).
+	// The chosen menu's ID overrides menu.menu_id from the template; with no
+	// choice the template's menu_id is used as-is.
+	menu, err := chooseWordPressMenu(application, runtime, l)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
 	}
-	
+	if menu != nil {
+		runtime.MenuSlug = menu.Slug
+		if menu.ID > 0 {
+			templateConfig.Menu.MenuId = strconv.Itoa(menu.ID)
+		} else {
+			fmt.Fprintf(os.Stderr, "WordPress did not report an ID for menu %q; using menu_id %s from the template\n", menu.Slug, templateConfig.Menu.MenuId)
+		}
+	}
+
 	op = l.StartOperation("process_films")
-	op.WithContext("template", runtime.Template)
+	op.WithContext("menu_slug", runtime.MenuSlug)
+	op.WithContext("menu_id", templateConfig.Menu.MenuId)
 	op.WithContext("year", runtime.Year)
-	op.Complete(fmt.Sprintf("Starting film processing with template '%s'", runtime.Template))
-	// Template is the WP menu slug
+	op.Complete(fmt.Sprintf("Starting film processing with menu '%s' (id %s)", runtime.MenuSlug, templateConfig.Menu.MenuId))
 
 	if err := application.ProcessFilms(runtime.Year, templateConfig, metadata); err != nil {
 		op := l.StartOperation("process_films")
-		op.WithContext("template", runtime.Template)
+		op.WithContext("menu_slug", runtime.MenuSlug)
 		op.WithContext("year", runtime.Year)
 		op.Fail("Failed to process films", err)
 		log.Fatalf("Failed to process films: %v", err)
 	}
 
 	op = l.StartOperation("process_films")
-	op.WithContext("template", runtime.Template)
+	op.WithContext("menu_slug", runtime.MenuSlug)
 	op.WithContext("year", runtime.Year)
 	op.Complete("Application completed successfully")
 }
@@ -259,6 +204,92 @@ func promptString(label string) string {
 		return ""
 	}
 	return strings.TrimSpace(input)
+}
+
+// chooseWordPressMenu resolves the navigation menu to render in the Divi
+// template. With -menu-slug it must match an existing WordPress menu (error
+// otherwise). Without it the user picks from the list; an empty answer (or a
+// failure to fetch menus) returns nil so the template's menu_id is kept.
+func chooseWordPressMenu(application *app.App, runtime *RuntimeOptions, l *logger.Logger) (*services.WordPressMenu, error) {
+	op := l.StartOperation("list_wordpress_menus")
+	op.WithContext("year_filter", runtime.Year)
+	menus, err := application.ListWordPressMenus()
+	if err != nil {
+		op.Fail("Failed to fetch WordPress menus", err)
+		if runtime.MenuSlug != "" {
+			return nil, fmt.Errorf("cannot resolve -menu-slug %q: %w", runtime.MenuSlug, err)
+		}
+		return nil, nil
+	}
+	op.WithContext("menu_count", len(menus))
+	op.Complete(fmt.Sprintf("Fetched %d WordPress menus", len(menus)))
+
+	if runtime.MenuSlug != "" {
+		for _, m := range menus {
+			if strings.EqualFold(m.Slug, runtime.MenuSlug) {
+				return m, nil
+			}
+		}
+		return nil, fmt.Errorf("WordPress menu %q not found (-menu-slug)", runtime.MenuSlug)
+	}
+	if len(menus) == 0 {
+		return nil, nil
+	}
+
+	display, matched := filterMenusByYear(menus, runtime.Year)
+	switch {
+	case runtime.Year == "":
+		fmt.Println("Available WordPress menus:")
+	case matched:
+		fmt.Printf("Available WordPress menus matching year '%s':\n", runtime.Year)
+	default:
+		fmt.Printf("No menus matched year '%s'. Showing all menus:\n", runtime.Year)
+	}
+	for idx, m := range display {
+		fmt.Printf("  %d) %s (%s) [id %d]\n", idx+1, m.Name, m.Slug, m.ID)
+	}
+	choice := promptString("Enter choice number or slug (enter to keep the template's menu_id)")
+	return findMenu(display, choice), nil
+}
+
+// filterMenusByYear returns the menus whose slug or name contains year, and
+// whether any matched. With no year, or no match, all menus are returned.
+func filterMenusByYear(menus []*services.WordPressMenu, year string) ([]*services.WordPressMenu, bool) {
+	year = strings.ToLower(strings.TrimSpace(year))
+	if year == "" {
+		return menus, false
+	}
+	var filtered []*services.WordPressMenu
+	for _, m := range menus {
+		if strings.Contains(strings.ToLower(m.Slug), year) || strings.Contains(strings.ToLower(m.Name), year) {
+			filtered = append(filtered, m)
+		}
+	}
+	if len(filtered) == 0 {
+		return menus, false
+	}
+	return filtered, true
+}
+
+// findMenu resolves a user choice against menus: a 1-based list number, or a
+// slug/name (case-insensitive). Returns nil when nothing matches.
+func findMenu(menus []*services.WordPressMenu, choice string) *services.WordPressMenu {
+	choice = strings.TrimSpace(choice)
+	if choice == "" {
+		return nil
+	}
+	if num, err := strconv.Atoi(choice); err == nil {
+		if num >= 1 && num <= len(menus) {
+			return menus[num-1]
+		}
+		return nil
+	}
+	for _, m := range menus {
+		if strings.EqualFold(m.Slug, choice) || strings.EqualFold(m.Name, choice) {
+			return m
+		}
+	}
+	return nil
 }
 
 func runConfigurationMenu() {

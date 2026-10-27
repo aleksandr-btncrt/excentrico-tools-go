@@ -5,8 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path/filepath"
-	"strconv"
+	"regexp"
 	"strings"
 	"time"
 
@@ -15,6 +14,7 @@ import (
 	"excentrico-tools-go/internal/logger"
 	"excentrico-tools-go/internal/models"
 	"excentrico-tools-go/internal/services"
+	"excentrico-tools-go/internal/utils"
 
 	"github.com/goodsign/monday"
 )
@@ -141,7 +141,7 @@ func (a *App) ProcessFilms(year string, templateConfig services.TemplateData, me
 	headers := make([]string, 0)
 	for _, cell := range data[0] {
 		if cell != nil {
-			headers = append(headers, cell.(string))
+			headers = append(headers, utils.CellString(cell))
 		}
 	}
 
@@ -171,10 +171,7 @@ func (a *App) ProcessFilms(year string, templateConfig services.TemplateData, me
 		// Apply year filter if specified
 		if year != "" {
 			if edicion, exists := obj["EDICIÓN"]; exists {
-				edicionStr := ""
-				if edicion != nil {
-					edicionStr = edicion.(string)
-				}
+				edicionStr := utils.CellString(edicion)
 
 				expectedEdicion := "Excéntrico " + year
 				if strings.EqualFold(edicionStr, expectedEdicion) {
@@ -237,26 +234,32 @@ func (a *App) processFilteredObjects(filteredObjects []map[string]any, year stri
 		filmSeccion := "unnamed_section"
 		filmDirect := "unammed_directs"
 		if name, exists := obj["TÍTULO ORIGINAL"]; exists && name != nil {
-			filmName = name.(string)
+			filmName = utils.CellString(name)
 		} else if name, exists := obj["Name"]; exists && name != nil {
-			filmName = name.(string)
+			filmName = utils.CellString(name)
 		}
 		if name, exists := obj["SECCIÓN"]; exists && name != nil {
-			filmSeccion = name.(string)
+			filmSeccion = utils.CellString(name)
 		}
 		if name, exists := obj["DIRECCIÓN"]; exists && name != nil {
-			filmDirect = name.(string)
+			filmDirect = utils.CellString(name)
 		}
 
 		filmID := strings.ToLower(strings.ReplaceAll(filmName, " ", "_"))
-		SaveMetadata(filmName, CreateMetadata(filmName, filmSeccion, filmDirect, metadata, year))
 
 		filmOp := l.StartOperation("process_single_film")
 		filmOp.WithFilm(filmID, filmName, year, filmSeccion)
 		filmOp.WithContext("film_index", processedCount)
 		filmOp.WithContext("total_films", len(filteredObjects))
 
-		if err := a.filmProcessor.ProcessSingleFilm(obj, baseDir, year, filmName, templateConfig); err != nil {
+		caption, err := CreateMetadata(filmName, filmSeccion, filmDirect, metadata, year)
+		if err != nil {
+			filmOp.Fail(fmt.Sprintf("Failed to build caption for film '%s'", filmName), err)
+			errorCount++
+			continue
+		}
+
+		if err := a.filmProcessor.ProcessSingleFilm(obj, baseDir, year, filmName, caption, templateConfig); err != nil {
 			filmOp.Fail(fmt.Sprintf("Failed to process film '%s'", filmName), err)
 			errorCount++
 		} else {
@@ -273,64 +276,63 @@ func (a *App) processFilteredObjects(filteredObjects []map[string]any, year stri
 	return nil
 }
 
-func CreateMetadata(movieName string, seccion string, direccion string , metadata *models.Metadata, year string) string {
-	section :=  strings.ToUpper(seccion);
-	
-	// Handle nil metadata
-	if metadata == nil {
-		return section + " " + year + " - " + movieName + " - " + strings.ToUpper(strings.Replace(direccion, "y", "&", -1)) + " - " + "Programación Excéntrico " + year
-	}
-	
-	// Check if Cities and Dates arrays have elements
-	city := ""
-	if len(metadata.Cities) > 0 {
-		city = metadata.Cities[0]
-	}
-	
-	dateFrom := ""
-	dateTo := ""
-	if len(metadata.Dates) > 0 && len(metadata.Dates[0]) > 0 {
-		dateFrom = parseDate(metadata.Dates[0][0])
-		if len(metadata.Dates[0]) > 1 {
-			dateTo = parseDate(metadata.Dates[0][1])
+// directorSplitRe splits a multi-director cell ("A, B y C", "A & B", "A + B").
+// Temporary copy of the regex in wordpress/operations.go; de-duplicated when
+// the sheet package is introduced (plan Step 5).
+var directorSplitRe = regexp.MustCompile(`\s*,\s*|\s+\+\s+|\s+y\s+|\s*&\s*`)
+
+// formatDirectors splits the director cell into names and joins them with
+// " & " in upper case. Only whole-word separators are replaced, so names that
+// contain the letter "y" keep it (previously "Maya" became "MA&A").
+func formatDirectors(direccion string) string {
+	var names []string
+	for _, p := range directorSplitRe.Split(direccion, -1) {
+		if p = strings.TrimSpace(p); p != "" {
+			names = append(names, p)
 		}
 	}
-	
-	// Build the metadata string
-	result := section + " " + year + " - " + movieName + " - " + strings.ToUpper(strings.Replace(direccion, "y", "&", -1)) + " - " + "Programación Excéntrico " + year
-	if city != "" {
-		result += " " + city
+	return strings.ToUpper(strings.Join(names, " & "))
+}
+
+// CreateMetadata builds the film caption written to films/<film>/metadata.json:
+//
+//	SECCIÓN YEAR - Title - DIRECTOR & DIRECTOR - Programación Excéntrico YEAR [City] [del <date> [al <date>]]
+//
+// It returns an error when a date in metadata is not in YYYY-MM-DD format.
+func CreateMetadata(movieName string, seccion string, direccion string, metadata *models.Metadata, year string) (string, error) {
+	result := strings.ToUpper(seccion) + " " + year + " - " + movieName + " - " + formatDirectors(direccion) + " - " + "Programación Excéntrico " + year
+	if metadata == nil {
+		return result, nil
 	}
-	if dateFrom != "" {
+
+	if len(metadata.Cities) > 0 && metadata.Cities[0] != "" {
+		result += " " + metadata.Cities[0]
+	}
+
+	if len(metadata.Dates) > 0 && len(metadata.Dates[0]) > 0 {
+		dateFrom, err := parseDate(metadata.Dates[0][0])
+		if err != nil {
+			return "", err
+		}
 		result += " del " + dateFrom
-		if dateTo != "" {
+		if len(metadata.Dates[0]) > 1 {
+			dateTo, err := parseDate(metadata.Dates[0][1])
+			if err != nil {
+				return "", err
+			}
 			result += " al " + dateTo
 		}
 	}
-	
-	return result
+
+	return result, nil
 }
 
-func parseDate(date string) string {
-	dateParts := strings.Split(date, "-")
-	year, err := strconv.Atoi(dateParts[0])
+// parseDate formats a YYYY-MM-DD date as a Spanish long date, e.g.
+// "2026-01-23" -> "viernes 23 de enero".
+func parseDate(date string) (string, error) {
+	t, err := time.Parse("2006-01-02", strings.TrimSpace(date))
 	if err != nil {
-		fmt.Println("Could not parse year:", err)
+		return "", fmt.Errorf("invalid metadata date %q (want YYYY-MM-DD): %w", date, err)
 	}
-	month, err := strconv.Atoi(dateParts[1])
-	if err != nil {
-		fmt.Println("Could not parse month:", err)
-	}
-	day, err := strconv.Atoi(dateParts[2])
-	if err != nil {
-		fmt.Println("Could not parse day:", err)
-	}
-	formatedDay := time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.Local)
-	return monday.Format(formatedDay, "Monday 02 de January", monday.LocaleEsES)
-}
-
-
-func SaveMetadata(movieName string, metadata string)  {
-	path := filepath.Join("films", movieName, "metadata.json")
-	os.WriteFile(path, []byte(metadata), 0644)
+	return monday.Format(t, "Monday 02 de January", monday.LocaleEsES), nil
 }

@@ -113,7 +113,13 @@ type WordPressMenu struct {
 
 func NewWordPressService(config config.WordPressConfig) *WordPressService {
 
-	authString := fmt.Sprintf("%s:%s", config.Username, config.ApplicationPassword)
+	// Prefer the application password; fall back to the plain password
+	// (config.Load accepts either one).
+	password := config.ApplicationPassword
+	if password == "" {
+		password = config.Password
+	}
+	authString := fmt.Sprintf("%s:%s", config.Username, password)
 	encodedAuth := base64.StdEncoding.EncodeToString([]byte(authString))
 
 	baseURL := strings.TrimRight(config.BaseURL, "/")
@@ -444,21 +450,6 @@ func (s *WordPressService) UploadMediaFromFile(filePath, title, altText string) 
 	return &media, nil
 }
 
-func (s *WordPressService) GetCategories() ([]*WordPressCategory, error) {
-	resp, err := s.makeRequest("GET", "/wp/v2/project-category", nil)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	var categories []*WordPressCategory
-	if err := json.NewDecoder(resp.Body).Decode(&categories); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %v", err)
-	}
-
-	return categories, nil
-}
-
 func (s *WordPressService) SearchCategories(year string) ([]*WordPressCategory, error) {
 
 	query := url.Values{}
@@ -466,31 +457,6 @@ func (s *WordPressService) SearchCategories(year string) ([]*WordPressCategory, 
 	query.Set("per_page", "100")
 
 	endpoint := "/wp/v2/project_category?" + query.Encode()
-
-	resp, err := s.makeRequest("GET", endpoint, nil)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	var categories []*WordPressCategory
-	if err := json.NewDecoder(resp.Body).Decode(&categories); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %v", err)
-	}
-
-	return categories, nil
-}
-
-func (s *WordPressService) SearchCategoriesWithParams(params map[string]string) ([]*WordPressCategory, error) {
-	query := url.Values{}
-	for key, value := range params {
-		query.Set(key, value)
-	}
-
-	endpoint := "/wp/v2/categories"
-	if len(query) > 0 {
-		endpoint += "?" + query.Encode()
-	}
 
 	resp, err := s.makeRequest("GET", endpoint, nil)
 	if err != nil {
@@ -638,14 +604,13 @@ func (s *WordPressService) GetNavMenus() ([]*WordPressMenu, error) {
 		}
 	}
 
-	// Try to decode as map of locations
+	// Try to decode as map of locations. Locations carry no menu term ID, so
+	// ID is left 0 (unknown) rather than inventing one.
 	var locations map[string]menuLocation
 	if err := json.Unmarshal(bodyBytes, &locations); err == nil {
 		var result []*WordPressMenu
-		i := 1
 		for slug, loc := range locations {
-			result = append(result, &WordPressMenu{ID: i, Name: loc.Name, Slug: slug})
-			i++
+			result = append(result, &WordPressMenu{Name: loc.Name, Slug: slug})
 		}
 		if len(result) > 0 {
 			return result, nil
@@ -724,38 +689,20 @@ func (s *WordPressService) GetCategoryIDsByNames(year string,categoryNames []str
 	foundCount := 0
 	notFoundCount := 0
 
+	// One request per film instead of one per category name.
+	categories, err := s.SearchCategories(year)
+	if err != nil {
+		op.Fail("Failed to search categories", err)
+		return nil, fmt.Errorf("search categories for %q: %w", year, err)
+	}
+
 	for _, categoryName := range categoryNames {
 
 		if strings.TrimSpace(categoryName) == "" {
 			continue
 		}
 
-		categories, err := s.SearchCategories(year)
-		if err != nil {
-			op.Warn(&logger.WideEvent{
-				Message: fmt.Sprintf("Failed to search for category '%s'", categoryName),
-			})
-			notFoundCount++
-			continue
-		}
-
-		var foundCategory *WordPressCategory
-		for _, category := range categories {
-			if strings.Contains(strings.ToLower(category.Name), strings.ReplaceAll(strings.ToLower(categoryName), "" , "-")) {
-				foundCategory = category
-				break
-			}
-		}
-
-		if foundCategory == nil {
-			for _, category := range categories {
-				if strings.Contains(strings.ToLower(category.Name), strings.ToLower(strings.TrimSpace(categoryName))) {
-					foundCategory = category
-					break
-				}
-			}
-		}
-
+		foundCategory := matchCategory(categories, categoryName)
 		if foundCategory != nil {
 			categoryIDs = append(categoryIDs, foundCategory.ID)
 			categoryIDs = append(categoryIDs, foundCategory.Parent)
@@ -771,6 +718,25 @@ func (s *WordPressService) GetCategoryIDsByNames(year string,categoryNames []str
 	op.Complete(fmt.Sprintf("Found %d categories, %d not found", foundCount, notFoundCount))
 
 	return categoryIDs, nil
+}
+
+// matchCategory returns the first category whose name contains categoryName,
+// trying the dashed form first ("Competencia Nacional" -> "competencia-nacional")
+// and then the plain form. Matching is case-insensitive. Returns nil when
+// nothing matches.
+func matchCategory(categories []*WordPressCategory, categoryName string) *WordPressCategory {
+	name := strings.ToLower(strings.TrimSpace(categoryName))
+	if name == "" {
+		return nil
+	}
+	for _, candidate := range []string{strings.ReplaceAll(name, " ", "-"), name} {
+		for _, category := range categories {
+			if category != nil && strings.Contains(strings.ToLower(category.Name), candidate) {
+				return category
+			}
+		}
+	}
+	return nil
 }
 
 func ParseCategoryString(categoryString string) []string {

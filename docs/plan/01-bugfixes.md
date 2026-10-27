@@ -59,7 +59,8 @@ with `utils.CellString` (and later by the `sheet` package's row decoder).
   which corrupted names ("Ray" → "RA&"). Directors are now split with the
   shared director regex and joined with `" & "`.
 - `parseDate` ignored parse errors; it now uses `time.Parse` and returns an
-  error.
+  error. `CreateMetadata` returns `(string, error)`; a malformed date in
+  `metadata/<year>.json` fails that film with a message naming the date.
 - The caption was written to `films/<raw title>/metadata.json` before the
   directory existed (it is created under the *sanitised* title), and the
   write error was ignored. Writing moved into `Processor.ProcessSingleFilm`
@@ -83,3 +84,15 @@ discarded; the rendered `menu_id` came from the template file. The selected
 menu's ID now overrides `menu.menu_id`. Not selecting a menu is no longer an
 abort — the template's `menu_id` is used. `-nav-menu` is renamed `-menu-slug`
 (old name kept as an alias).
+
+Details decided during implementation:
+
+- With `-menu-slug`, the slug must match a WordPress menu; otherwise the run
+  stops before processing. Interactively, an empty answer keeps the
+  template's `menu_id`.
+- `GetNavMenus`' menu-locations fallback used to synthesise IDs (1, 2, ...).
+  Those are not menu term IDs, so it now leaves `ID` at 0 and the template's
+  `menu_id` is kept (with a notice) for such menus.
+- A search-categories failure is logged and the post is saved without
+  categories, as before, but now costs one request per film instead of one
+  per category name.
