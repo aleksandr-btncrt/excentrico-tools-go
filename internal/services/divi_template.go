@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"excentrico-tools-go/internal/debug"
+	"excentrico-tools-go/internal/logger"
 	"excentrico-tools-go/internal/models"
 	"fmt"
 	"html"
@@ -482,7 +484,7 @@ func (s *DiviTemplateService) SaveDiviTemplateToFile(ctx context.Context, filmDa
 		return fmt.Errorf("failed to write template file: %v", err)
 	}
 
-	fmt.Printf("Saved Divi template to: %s\n", templatePath)
+	logger.Get().Infof("save_divi_template", "Saved Divi template to: %s", templatePath)
 
 	return nil
 }
@@ -493,13 +495,13 @@ func (s *DiviTemplateService) fetchWordPressImagesData(ctx context.Context, imag
 	for _, imageID := range imageIds {
 		media, err := wordpressService.GetMedia(ctx, imageID)
 		if err != nil {
-			fmt.Printf("Warning: Failed to fetch media %d: %v\n", imageID, err)
+			logger.Get().Warnf("fetch_wordpress_images", "Failed to fetch media %d: %v", imageID, err)
 			continue
 		}
 
 		encoded, err := s.downloadAndEncodeImage(ctx, wordpressService, media.SourceURL)
 		if err != nil {
-			fmt.Printf("Warning: Failed to encode image %d: %v\n", imageID, err)
+			logger.Get().Warnf("fetch_wordpress_images", "Failed to encode image %d: %v", imageID, err)
 			encoded = ""
 		}
 
@@ -538,7 +540,7 @@ func (s *DiviTemplateService) findDirectorImage(ctx context.Context, directorNam
 
 		title := strings.ToLower(media.Title.String())
 		if strings.Contains(title, cleanName) {
-			fmt.Printf("Found director image for '%s': %s\n", directorName, media.SourceURL)
+			debug.Printf("Found director image for '%s': %s", directorName, media.SourceURL)
 			return media.SourceURL
 		}
 
@@ -550,14 +552,14 @@ func (s *DiviTemplateService) findDirectorImage(ctx context.Context, directorNam
 			}
 
 			if strings.Contains(filename, cleanName) {
-				fmt.Printf("Found director image for '%s': %s\n", directorName, media.SourceURL)
+				debug.Printf("Found director image for '%s': %s", directorName, media.SourceURL)
 				return media.SourceURL
 			}
 		}
 
 		altText := strings.ToLower(media.AltText)
 		if strings.Contains(altText, cleanName) {
-			fmt.Printf("Found director image for '%s': %s\n", directorName, media.SourceURL)
+			debug.Printf("Found director image for '%s': %s", directorName, media.SourceURL)
 			return media.SourceURL
 		}
 	}
@@ -583,14 +585,14 @@ func (s *DiviTemplateService) findDirectorImage(ctx context.Context, directorNam
 
 			for _, part := range nameParts {
 				if len(part) > 2 && (strings.Contains(title, part) || strings.Contains(filename, part)) {
-					fmt.Printf("Found director image for '%s' (partial match with '%s'): %s\n", directorName, part, media.SourceURL)
+					debug.Printf("Found director image for '%s' (partial match with '%s'): %s", directorName, part, media.SourceURL)
 					return media.SourceURL
 				}
 			}
 		}
 	}
 
-	fmt.Printf("No director image found for '%s'\n", directorName)
+	logger.Get().Warnf("find_director_image", "No director image found for '%s'", directorName)
 	return ""
 }
 

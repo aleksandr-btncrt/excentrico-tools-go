@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"excentrico-tools-go/internal/app"
 	"excentrico-tools-go/internal/config"
 	"excentrico-tools-go/internal/debug"
@@ -30,124 +31,129 @@ type RuntimeOptions struct {
 	Year         string
 	TemplatePath string
 	// MenuSlug is the WordPress navigation menu slug (-menu-slug / -nav-menu).
-	MenuSlug string
+	MenuSlug       string
+	Film           string
+	NonInteractive bool
+	DryRun         bool
+	Check          bool
 }
 
 func main() {
+	if err := run(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+// run is the whole program; every failure is returned here so main has a
+// single exit path (deferred cleanup always runs).
+func run() error {
 	createConfig := flag.Bool("create-config", false, "Create a default configuration file")
-	yearFlag := flag.String("year", "", "Filter by year (e.g., 2024, 2025)")
-	debugFlag := flag.Bool("debug", false, "Enable debug logging")
+	yearFlag := flag.String("year", "", "Edition year; selects templates/<year>.json and metadata/<year>.json")
+	debugFlag := flag.Bool("debug", false, "Write debug events to the log file")
 	menuFlag := flag.String("menu", "", "Action to run: configuration | process")
 	menuSlugFlag := flag.String("menu-slug", "", "WordPress navigation menu slug; its ID overrides menu.menu_id from the template")
 	flag.StringVar(menuSlugFlag, "nav-menu", "", "Deprecated alias for -menu-slug")
 	templateFlag := flag.String("template", "", "Path to a template JSON file (required when -year is not given)")
+	filmFlag := flag.String("film", "", "Process only the film with this TÍTULO ORIGINAL (case-insensitive)")
+	nonInteractiveFlag := flag.Bool("non-interactive", false, "Never prompt; use flags and defaults")
+	dryRunFlag := flag.Bool("dry-run", false, "Read the sheet and report what would be processed; no downloads, uploads or writes")
+	checkFlag := flag.Bool("check", false, "Check WordPress auth, Turso connectivity and the sheet header row, then exit")
 	flag.Parse()
 
-	// Initialize logger
 	logger.Init("excentrico-tools-go")
 	l := logger.Get()
-	if *debugFlag {
-		l.SetSampleRate(1.0) // Log everything in debug mode
-	}
-	
-	// Log file path information
-	if logPath := l.GetLogFilePath(); logPath != "" {
-		fmt.Fprintf(os.Stderr, "Logging to: %s\n", logPath)
-	}
-	
-	// Ensure log file is closed on exit
 	defer func() {
 		if err := logger.Close(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error closing log file: %v\n", err)
 		}
 	}()
-
+	if logPath := l.GetLogFilePath(); logPath != "" {
+		fmt.Fprintf(os.Stderr, "Logging to: %s\n", logPath)
+	}
 	debug.SetEnabled(*debugFlag)
 
 	if *createConfig {
 		op := l.StartOperation("create_config")
 		if err := config.CreateDefaultConfig(); err != nil {
 			op.Fail("Failed to create configuration", err)
-			log.Fatalf("Failed to create configuration: %v", err)
+			return fmt.Errorf("create configuration: %w", err)
 		}
 		op.Complete("Configuration file created successfully")
-		return
+		return nil
 	}
 
-	cfg, err := config.Load()
-	if err != nil {
-		op := l.StartOperation("load_config")
-		op.WithError(err)
-		op.Fail("Configuration error", err)
-		fmt.Println("")
-		fmt.Println("To create a default configuration file, run:")
-		fmt.Println("  ./excentrico-tools-go -create-config")
-		fmt.Println("")
-		fmt.Println("Then edit the configuration.json file with your settings.")
-		// Even if configuration is missing, allow entering the configuration menu
-	}
-
-	if cfg != nil {
-		op := l.StartOperation("load_config")
+	op := l.StartOperation("load_config")
+	cfg, cfgErr := config.Load()
+	if cfgErr != nil {
+		// Not fatal yet: the configuration menu works without a config.
+		op.Fail("Configuration error", cfgErr)
+	} else {
 		op.WithContext("google_sheet_id", cfg.GoogleSheetID)
 		op.Complete("Configuration loaded successfully")
 	}
 
-	// Collect runtime options (from flags or interactive prompts)
 	runtime := &RuntimeOptions{
-		Menu:         strings.TrimSpace(*menuFlag),
-		Year:         strings.TrimSpace(*yearFlag),
-		MenuSlug:     strings.TrimSpace(*menuSlugFlag),
-		TemplatePath: strings.TrimSpace(*templateFlag),
+		Menu:           strings.TrimSpace(*menuFlag),
+		Year:           strings.TrimSpace(*yearFlag),
+		MenuSlug:       strings.TrimSpace(*menuSlugFlag),
+		TemplatePath:   strings.TrimSpace(*templateFlag),
+		Film:           strings.TrimSpace(*filmFlag),
+		NonInteractive: *nonInteractiveFlag,
+		DryRun:         *dryRunFlag,
+		Check:          *checkFlag,
 	}
 
 	if runtime.Menu == "" {
-		runtime.Menu = promptMenuSelection()
+		if runtime.NonInteractive || runtime.Check {
+			runtime.Menu = "process"
+		} else {
+			runtime.Menu = promptMenuSelection()
+		}
 	}
 
 	switch strings.ToLower(runtime.Menu) {
 	case "configuration", "config", "1":
-		runConfigurationMenu()
-		return
+		if runtime.NonInteractive {
+			return errors.New("the configuration menu is interactive; use -create-config with -non-interactive")
+		}
+		return runConfigurationMenu()
 	case "process", "process-movies", "2":
 		// proceed to processing flow below
 	default:
-		op := l.StartOperation("menu_selection")
-		op.WithContext("menu_option", runtime.Menu)
-		op.Fail(fmt.Sprintf("Unknown menu option '%s'", runtime.Menu), fmt.Errorf("valid options: configuration, process"))
-		return
+		return fmt.Errorf("unknown -menu %q (valid: configuration, process)", runtime.Menu)
 	}
 
 	if cfg == nil {
-		op := l.StartOperation("process_films")
-		op.Fail("Configuration required", fmt.Errorf("configuration is required to process movies"))
-		return
+		return fmt.Errorf("%w\nTo create a default configuration file, run:\n  ./excentrico-tools-go -create-config\nthen edit configuration.json with your settings", cfgErr)
 	}
-
-	if runtime.Year == "" {
-		runtime.Year = promptString("Year filter (enter to skip)")
-	}
-
-	// Load the template configuration. A missing or invalid template is fatal:
-	// processing without one used to panic halfway through a run.
-	templateConfig, err := loadTemplateConfig(runtime.TemplatePath, runtime.Year, l)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
-
-	var metadata = loadMetadata(runtime.Year, l)
 
 	// Ctrl-C / SIGTERM cancel in-flight HTTP requests and stop before the
 	// next film instead of killing the process mid-upload.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	op := l.StartOperation("initialize_application")
+	if runtime.Check {
+		return runCheck(ctx, cfg, l)
+	}
+
+	if runtime.Year == "" && !runtime.NonInteractive {
+		runtime.Year = promptString("Year filter (enter to skip)")
+	}
+
+	// A missing or invalid template is fatal before any network work:
+	// processing without one used to panic halfway through a run.
+	templateConfig, err := loadTemplateConfig(runtime.TemplatePath, runtime.Year, l)
+	if err != nil {
+		return err
+	}
+	metadata := loadMetadata(runtime.Year, l)
+
+	op = l.StartOperation("initialize_application")
 	application, err := app.New(cfg)
 	if err != nil {
 		op.Fail("Failed to initialize application", err)
-		log.Fatalf("Failed to initialize application: %v", err)
+		return fmt.Errorf("initialize application: %w", err)
 	}
 	op.Complete("Application initialized successfully")
 	defer application.Close()
@@ -157,36 +163,59 @@ func main() {
 	// choice the template's menu_id is used as-is.
 	menu, err := chooseWordPressMenu(ctx, application, runtime, l)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 	if menu != nil {
 		runtime.MenuSlug = menu.Slug
 		if menu.ID > 0 {
 			templateConfig.Menu.MenuId = strconv.Itoa(menu.ID)
 		} else {
-			fmt.Fprintf(os.Stderr, "WordPress did not report an ID for menu %q; using menu_id %s from the template\n", menu.Slug, templateConfig.Menu.MenuId)
+			l.Progress("WordPress did not report an ID for menu %q; using menu_id %s from the template", menu.Slug, templateConfig.Menu.MenuId)
 		}
 	}
 
-	op = l.StartOperation("process_films")
-	op.WithContext("menu_slug", runtime.MenuSlug)
-	op.WithContext("menu_id", templateConfig.Menu.MenuId)
-	op.WithContext("year", runtime.Year)
-	op.Complete(fmt.Sprintf("Starting film processing with menu '%s' (id %s)", runtime.MenuSlug, templateConfig.Menu.MenuId))
-
-	if err := application.ProcessFilms(ctx, runtime.Year, templateConfig, metadata); err != nil {
-		op := l.StartOperation("process_films")
-		op.WithContext("menu_slug", runtime.MenuSlug)
-		op.WithContext("year", runtime.Year)
-		op.Fail("Failed to process films", err)
-		log.Fatalf("Failed to process films: %v", err)
+	mode := ""
+	if runtime.DryRun {
+		mode = " (dry run)"
 	}
+	l.Progress("Processing year %q with menu_id %s%s", runtime.Year, templateConfig.Menu.MenuId, mode)
 
-	op = l.StartOperation("process_films")
-	op.WithContext("menu_slug", runtime.MenuSlug)
-	op.WithContext("year", runtime.Year)
-	op.Complete("Application completed successfully")
+	return application.ProcessFilms(ctx, app.ProcessOptions{
+		Year:     runtime.Year,
+		Film:     runtime.Film,
+		DryRun:   runtime.DryRun,
+		Template: templateConfig,
+		Metadata: metadata,
+	})
+}
+
+// runCheck prints one line per connectivity check and fails if any failed.
+func runCheck(ctx context.Context, cfg *config.Config, l *logger.Logger) error {
+	application, err := app.New(cfg)
+	if err != nil {
+		return fmt.Errorf("initialize application: %w", err)
+	}
+	defer application.Close()
+
+	op := l.StartOperation("check").Important()
+	failed := 0
+	for _, r := range application.Check(ctx) {
+		if r.Err != nil {
+			failed++
+			op.WithContext(r.Name, r.Err.Error())
+			l.Progress("FAIL %-13s %v", r.Name, r.Err)
+			continue
+		}
+		op.WithContext(r.Name, r.Detail)
+		l.Progress("ok   %-13s %s", r.Name, r.Detail)
+	}
+	if failed > 0 {
+		err := fmt.Errorf("%d check(s) failed", failed)
+		op.Fail("Checks failed", err)
+		return err
+	}
+	op.Complete("All checks passed")
+	return nil
 }
 
 func promptMenuSelection() string {
@@ -223,9 +252,13 @@ func readLine(sc *bufio.Scanner) string {
 
 // chooseWordPressMenu resolves the navigation menu to render in the Divi
 // template. With -menu-slug it must match an existing WordPress menu (error
-// otherwise). Without it the user picks from the list; an empty answer (or a
-// failure to fetch menus) returns nil so the template's menu_id is kept.
+// otherwise). Without it the user picks from the list; an empty answer, a
+// failure to fetch menus or -non-interactive returns nil so the template's
+// menu_id is kept.
 func chooseWordPressMenu(ctx context.Context, application *app.App, runtime *RuntimeOptions, l *logger.Logger) (*services.WordPressMenu, error) {
+	if runtime.MenuSlug == "" && runtime.NonInteractive {
+		return nil, nil
+	}
 	op := l.StartOperation("list_wordpress_menus")
 	op.WithContext("year_filter", runtime.Year)
 	menus, err := application.ListWordPressMenus(ctx)
@@ -307,39 +340,43 @@ func findMenu(menus []*services.WordPressMenu, choice string) *services.WordPres
 	return nil
 }
 
-func runConfigurationMenu() {
+func runConfigurationMenu() error {
 	fmt.Println("Configuration menu")
 	// If configuration.json does not exist, offer to create it
 	if _, err := os.Stat("configuration.json"); os.IsNotExist(err) {
 		fmt.Println("No configuration.json found. Create a default one now? [y/N]")
-		answer := promptString("Confirm")
-		if strings.ToLower(answer) == "y" || strings.ToLower(answer) == "yes" {
+		if confirmed(promptString("Confirm")) {
 			if err := config.CreateDefaultConfig(); err != nil {
-				log.Fatalf("Failed to create configuration: %v", err)
+				return fmt.Errorf("create configuration: %w", err)
 			}
-			return
+			return nil
 		}
 		fmt.Println("Skipping creation. Exiting configuration menu.")
-		return
+		return nil
 	}
 
 	fmt.Println("configuration.json exists. Options:")
 	fmt.Println("  1) Recreate default configuration.json")
 	fmt.Println("  2) Exit")
-	choice := promptString("Enter choice [1-2]")
-	if choice == "1" {
+	if promptString("Enter choice [1-2]") == "1" {
 		fmt.Println("This will overwrite configuration.json. Proceed? [y/N]")
-		answer := promptString("Confirm")
-		if strings.ToLower(answer) == "y" || strings.ToLower(answer) == "yes" {
+		if confirmed(promptString("Confirm")) {
 			if err := config.CreateDefaultConfig(); err != nil {
-				log.Fatalf("Failed to recreate configuration: %v", err)
+				return fmt.Errorf("recreate configuration: %w", err)
 			}
-			return
+			return nil
 		}
 		fmt.Println("Cancelled. Exiting configuration menu.")
-		return
+		return nil
 	}
 	fmt.Println("Exiting configuration menu.")
+	return nil
+}
+
+// confirmed reports whether answer is "y" or "yes" (case-insensitive).
+func confirmed(answer string) bool {
+	a := strings.ToLower(strings.TrimSpace(answer))
+	return a == "y" || a == "yes"
 }
 
 // loadTemplateConfig loads the Divi template configuration. An explicit path

@@ -3,7 +3,7 @@ package logger
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"io"
 	"os"
 	"path/filepath"
 	"sync"
@@ -64,6 +64,9 @@ type WideEvent struct {
 	
 	// Additional context (flexible)
 	Context         map[string]any    `json:"context,omitempty"`
+
+	// important events bypass sampling (see OperationTracker.Important).
+	important bool
 }
 
 // ErrorContext provides detailed error information
@@ -85,21 +88,56 @@ type Logger struct {
 	logFile     *os.File // File handle for log output
 	logFilePath string   // Path to the log file
 	mu          sync.Mutex // Mutex for thread-safe file writes
+
+	// events receives the JSON wide events when set (tests); otherwise they
+	// go to logFile, or to stderr if the log file could not be opened.
+	events io.Writer
+	// progress receives human-readable Progress lines (default stderr).
+	progress io.Writer
 }
 
-// NewLogger creates a new logger instance
+// NewLogger creates a new logger instance writing JSON events to a unique
+// per-run file under logs/.
 func NewLogger(service string) *Logger {
-	l := &Logger{
-		service:         service,
-		sampleRate:      0.1, // Sample 10% of successful operations by default
-		errorRate:       1.0, // Always log errors
-		slowThresholdMs: 5000, // Log operations slower than 5 seconds
-	}
-	
+	l := newLogger(service)
+
 	// Create unique log file for this run
 	l.initLogFile()
-	
+
 	return l
+}
+
+// NewWithWriters creates a logger that writes JSON events to events and
+// progress lines to progress, without creating a log file. Used by tests.
+func NewWithWriters(service string, events, progress io.Writer) *Logger {
+	l := newLogger(service)
+	l.events = events
+	l.progress = progress
+	return l
+}
+
+func newLogger(service string) *Logger {
+	return &Logger{
+		service:         service,
+		sampleRate:      1.0,  // Keep every event; runs are tens of films
+		errorRate:       1.0,  // Always log errors
+		slowThresholdMs: 5000, // Log operations slower than 5 seconds
+		progress:        os.Stderr,
+	}
+}
+
+// SetVersion sets the version stamped on every event.
+func (l *Logger) SetVersion(version string) {
+	l.version = version
+}
+
+// Progress writes a human-readable line to the terminal (stderr). JSON
+// events never go to the terminal, so this is the only run output a user
+// sees besides prompts and errors.
+func (l *Logger) Progress(format string, args ...any) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	fmt.Fprintf(l.progress, format+"\n", args...)
 }
 
 // initLogFile creates a unique log file for this run
@@ -107,7 +145,7 @@ func (l *Logger) initLogFile() {
 	// Create logs directory if it doesn't exist
 	logsDir := "logs"
 	if err := os.MkdirAll(logsDir, 0755); err != nil {
-		log.Printf("WARNING: Failed to create logs directory: %v", err)
+		fmt.Fprintf(os.Stderr, "WARNING: Failed to create logs directory (events go to stderr): %v\n", err)
 		return
 	}
 	
@@ -122,7 +160,7 @@ func (l *Logger) initLogFile() {
 	// Open file in append mode (creates if doesn't exist)
 	logFile, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
-		log.Printf("WARNING: Failed to open log file %s: %v", logFilePath, err)
+		fmt.Fprintf(os.Stderr, "WARNING: Failed to open log file %s (events go to stderr): %v\n", logFilePath, err)
 		return
 	}
 	
@@ -171,6 +209,10 @@ func (l *Logger) Close() error {
 
 // shouldSample determines if an event should be logged based on tail sampling rules
 func (l *Logger) shouldSample(event *WideEvent) bool {
+	if event.important {
+		return true
+	}
+
 	// Always keep errors
 	if event.Level == "error" || event.Error != nil {
 		return true
@@ -235,28 +277,26 @@ func (l *Logger) emit(event *WideEvent) {
 	// Marshal to JSON
 	jsonBytes, err := json.Marshal(event)
 	if err != nil {
-		// Fallback to simple log if JSON marshaling fails
-		log.Printf("LOGGER ERROR: Failed to marshal event: %v", err)
+		fmt.Fprintf(os.Stderr, "LOGGER ERROR: Failed to marshal event: %v\n", err)
 		return
 	}
-	
-	// Output as single line JSON (structured logging)
+
+	// One JSON object per line, to the log file only (stderr if there is no
+	// log file); the terminal gets Progress lines instead.
 	jsonLine := string(jsonBytes) + "\n"
-	fmt.Fprint(os.Stdout, jsonLine)
-	
-	// Also write to log file if available
+
 	l.mu.Lock()
-	if l.logFile != nil {
-		_, writeErr := l.logFile.WriteString(jsonLine)
-		if writeErr != nil {
-			// Don't log to avoid recursion, but we could use stderr
+	defer l.mu.Unlock()
+	switch {
+	case l.events != nil:
+		_, _ = io.WriteString(l.events, jsonLine)
+	case l.logFile != nil:
+		if _, writeErr := l.logFile.WriteString(jsonLine); writeErr != nil {
 			fmt.Fprintf(os.Stderr, "LOGGER ERROR: Failed to write to log file: %v\n", writeErr)
-		} else {
-			// Flush to ensure logs are written immediately
-			l.logFile.Sync()
 		}
+	default:
+		fmt.Fprint(os.Stderr, jsonLine)
 	}
-	l.mu.Unlock()
 }
 
 // Info logs an informational event
@@ -284,7 +324,18 @@ func (l *Logger) Error(event *WideEvent) {
 // Debug logs a debug event (always logged, not sampled)
 func (l *Logger) Debug(event *WideEvent) {
 	event.Level = "debug"
+	event.important = true
 	l.emit(event)
+}
+
+// Infof logs a one-off informational event for operation.
+func (l *Logger) Infof(operation, format string, args ...any) {
+	l.Info(&WideEvent{Operation: operation, Message: fmt.Sprintf(format, args...)})
+}
+
+// Warnf logs a one-off warning event for operation.
+func (l *Logger) Warnf(operation, format string, args ...any) {
+	l.Warn(&WideEvent{Operation: operation, Message: fmt.Sprintf(format, args...)})
 }
 
 // StartOperation creates a new event and starts timing
@@ -304,6 +355,12 @@ type OperationTracker struct {
 	logger    *Logger
 	event     *WideEvent
 	startTime time.Time
+}
+
+// Important marks the event as always logged, regardless of sampling.
+func (ot *OperationTracker) Important() *OperationTracker {
+	ot.event.important = true
+	return ot
 }
 
 // WithFilm adds film context to the event
@@ -420,6 +477,14 @@ var defaultLogger *Logger
 // Init initializes the global logger
 func Init(service string) {
 	defaultLogger = NewLogger(service)
+}
+
+// SetDefault replaces the global logger and returns the previous one
+// (tests use it with NewWithWriters).
+func SetDefault(l *Logger) *Logger {
+	prev := defaultLogger
+	defaultLogger = l
+	return prev
 }
 
 // Get returns the global logger instance

@@ -10,7 +10,6 @@ import (
 	"excentrico-tools-go/internal/logger"
 	"fmt"
 	"io"
-	"log"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -312,7 +311,6 @@ func (s *WordPressService) DeletePost(ctx context.Context, postID int) error {
 	}
 	defer resp.Body.Close()
 
-	log.Printf("Deleted WordPress post ID: %d", postID)
 	return nil
 }
 
@@ -605,27 +603,26 @@ func (s *WordPressService) SearchMedia(ctx context.Context, search string) ([]*W
 	return items, nil
 }
 
-func (s *WordPressService) TestConnection(ctx context.Context) error {
-	log.Printf("Testing WordPress API connection to: %s", s.baseURL)
-
+// TestConnection checks authentication against /wp/v2/users/me and returns
+// the authenticated user's name (slug or display name).
+func (s *WordPressService) TestConnection(ctx context.Context) (string, error) {
 	resp, err := s.makeRequest(ctx, "GET", "/wp/v2/users/me", nil)
 	if err != nil {
-		return fmt.Errorf("connection test failed: %v", err)
+		return "", fmt.Errorf("connection test failed: %w", err)
 	}
 	defer resp.Body.Close()
 
-	var user map[string]interface{}
+	var user struct {
+		Name string `json:"name"`
+		Slug string `json:"slug"`
+	}
 	if err := json.NewDecoder(resp.Body).Decode(&user); err != nil {
-		return fmt.Errorf("failed to decode user response: %v", err)
+		return "", fmt.Errorf("failed to decode user response: %w", err)
 	}
-
-	if username, ok := user["username"].(string); ok {
-		log.Printf("WordPress API connection successful - authenticated as: %s", username)
-	} else {
-		log.Printf("WordPress API connection successful - user info: %v", user)
+	if user.Slug != "" {
+		return user.Slug, nil
 	}
-
-	return nil
+	return user.Name, nil
 }
 
 func (s *WordPressService) GetNavMenus(ctx context.Context) ([]*WordPressMenu, error) {

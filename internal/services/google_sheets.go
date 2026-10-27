@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"strings"
 
@@ -158,7 +157,6 @@ func (s *GoogleSheetsService) CreateSpreadsheet(title string) (*sheets.Spreadshe
 		return nil, fmt.Errorf("failed to create spreadsheet: %v", err)
 	}
 
-	log.Printf("Created spreadsheet: %s (ID: %s)", title, resp.SpreadsheetId)
 	return resp, nil
 }
 

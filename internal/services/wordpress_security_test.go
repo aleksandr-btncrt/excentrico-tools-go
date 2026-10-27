@@ -20,10 +20,34 @@ import (
 	"excentrico-tools-go/internal/logger"
 )
 
-// captureOutput runs fn with os.Stdout (structured logger) and the standard
-// log package (debug.Printf) redirected, and returns everything written.
+// syncBuffer is a bytes.Buffer safe for concurrent writers.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+// captureOutput runs fn with every output channel captured: the structured
+// logger's events (log file) and progress lines (including debug.Printf
+// events), os.Stdout, and the standard log package. It returns everything
+// written.
 func captureOutput(t *testing.T, fn func()) string {
 	t.Helper()
+	var events, progress syncBuffer
+	prev := logger.SetDefault(logger.NewWithWriters("test", &events, &progress))
+	defer logger.SetDefault(prev)
+
 	r, w, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
@@ -54,12 +78,10 @@ func captureOutput(t *testing.T, fn func()) string {
 	<-done
 	mu.Lock()
 	defer mu.Unlock()
-	return buf.String() + logBuf.String()
+	return events.String() + progress.String() + buf.String() + logBuf.String()
 }
 
 func TestWordPressService_NeverLogsCredentials(t *testing.T) {
-	t.Chdir(t.TempDir()) // the logger creates logs/ in the working directory
-
 	const user, pass = "editor", "s3cret-app-pass"
 	encoded := base64.StdEncoding.EncodeToString([]byte(user + ":" + pass))
 
@@ -80,7 +102,6 @@ func TestWordPressService_NeverLogsCredentials(t *testing.T) {
 
 	debug.SetEnabled(true)
 	defer debug.SetEnabled(false)
-	logger.Get().SetSampleRate(1.0)
 
 	out := captureOutput(t, func() {
 		s := NewWordPressService(config.WordPressConfig{BaseURL: srv.URL, Username: user, ApplicationPassword: pass})
@@ -92,8 +113,12 @@ func TestWordPressService_NeverLogsCredentials(t *testing.T) {
 		}
 	})
 
-	if out == "" {
-		t.Fatal("captured no output; the test would not detect a leak")
+	// Guard: the run must have produced request events and debug output,
+	// otherwise the assertions below would pass vacuously.
+	for _, want := range []string{`"operation":"wordpress_http_request"`, `"level":"debug"`} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("captured output lacks %s; the test would not detect a leak", want)
+		}
 	}
 	for _, secret := range []string{encoded, pass} {
 		if strings.Contains(out, secret) {

@@ -4,13 +4,14 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/drive/v3"
 	"google.golang.org/api/option"
+
+	"excentrico-tools-go/internal/debug"
 )
 
 type GoogleDriveService struct {
@@ -61,7 +62,7 @@ func (s *GoogleDriveService) DownloadFile(ctx context.Context, fileID, destinati
 		return fmt.Errorf("failed to copy file content: %v", err)
 	}
 
-	log.Printf("Downloaded file to: %s", destinationPath)
+	debug.Printf("Downloaded file to: %s", destinationPath)
 	return nil
 }
 

@@ -105,13 +105,28 @@ func (a *App) ListWordPressMenus(ctx context.Context) ([]*services.WordPressMenu
 	return a.wordpressService.GetNavMenus(ctx)
 }
 
-// ProcessFilms processes films from the Google Sheet with optional year filtering
-func (a *App) ProcessFilms(ctx context.Context, year string, templateConfig services.TemplateData, metadata *models.Metadata) error {
+// ProcessOptions selects and controls a processing run.
+type ProcessOptions struct {
+	// Year keeps only rows whose EDICIÓN is "Excéntrico <Year>" (all rows
+	// when empty).
+	Year string
+	// Film keeps only the row whose TÍTULO ORIGINAL matches (case-insensitive).
+	Film string
+	// DryRun reads and filters the sheet and reports what would be processed,
+	// without downloading, uploading or writing anything.
+	DryRun   bool
+	Template services.TemplateData
+	Metadata *models.Metadata
+}
+
+// ProcessFilms reads the Google Sheet, filters the rows and processes each
+// selected film, printing one progress line per film.
+func (a *App) ProcessFilms(ctx context.Context, opts ProcessOptions) error {
 	l := logger.Get()
-	op := l.StartOperation("process_films")
-	op.WithContext("year", year)
+	op := l.StartOperation("read_sheet")
+	op.WithContext("year", opts.Year)
 	op.WithContext("google_sheet_id", a.config.GoogleSheetID)
-	
+
 	if a.config.GoogleSheetID == "" {
 		err := errors.New("google_sheet_id is not configured; add it to configuration.json")
 		op.Fail("Google Sheet ID not configured", err)
@@ -123,162 +138,170 @@ func (a *App) ProcessFilms(ctx context.Context, year string, templateConfig serv
 		op.Fail("Failed to read data from Google Sheet", err)
 		return err
 	}
-
-	if len(data) == 0 {
-		op.Warn(&logger.WideEvent{
-			Message: "No data found in the sheet",
-		})
-		return nil
-	}
-
 	if len(data) < 2 {
-		op.Warn(&logger.WideEvent{
-			Message: "Sheet must have at least 2 rows (headers + data)",
-		})
+		op.Warn(&logger.WideEvent{Message: "Sheet must have at least 2 rows (headers + data)"})
+		l.Progress("The sheet has no data rows; nothing to process.")
 		return nil
 	}
 
-	// Extract headers
-	headers := make([]string, 0)
-	for _, cell := range data[0] {
-		if cell != nil {
-			headers = append(headers, utils.CellString(cell))
-		}
-	}
-
-	op.WithContext("header_count", len(headers))
+	films := filterRows(rowsToObjects(data), opts.Year, opts.Film)
 	op.WithContext("data_row_count", len(data)-1)
+	op.WithContext("selected_count", len(films))
+	op.WithContext("film_filter", opts.Film)
+	op.Complete(fmt.Sprintf("Read %d rows, %d selected", len(data)-1, len(films)))
 
-	// Convert rows to objects and apply filtering
-	objects := make([]map[string]any, 0)
-	filteredObjects := make([]map[string]any, 0)
-	matchedCount := 0
-	excludedCount := 0
+	if len(films) == 0 {
+		l.Progress("No films matched (year %q, film %q).", opts.Year, opts.Film)
+		return nil
+	}
+	return a.processFilteredObjects(ctx, films, opts)
+}
 
-	for i := 1; i < len(data); i++ {
-		row := data[i]
-		obj := make(map[string]any)
-
+// rowsToObjects maps each data row to header -> cell (missing cells are "").
+func rowsToObjects(data [][]any) []map[string]any {
+	headers := make([]string, 0, len(data[0]))
+	for _, cell := range data[0] {
+		headers = append(headers, utils.CellString(cell))
+	}
+	objects := make([]map[string]any, 0, len(data)-1)
+	for _, row := range data[1:] {
+		obj := make(map[string]any, len(headers))
 		for j, header := range headers {
+			if header == "" {
+				continue
+			}
 			if j < len(row) && row[j] != nil {
 				obj[header] = row[j]
 			} else {
 				obj[header] = ""
 			}
 		}
-
 		objects = append(objects, obj)
-
-		// Apply year filter if specified
-		if year != "" {
-			if edicion, exists := obj["EDICIÓN"]; exists {
-				edicionStr := utils.CellString(edicion)
-
-				expectedEdicion := "Excéntrico " + year
-				if strings.EqualFold(edicionStr, expectedEdicion) {
-					filteredObjects = append(filteredObjects, obj)
-					matchedCount++
-				} else {
-					excludedCount++
-				}
-			} else {
-				excludedCount++
-			}
-		} else {
-			filteredObjects = append(filteredObjects, obj)
-			matchedCount++
-		}
 	}
-
-	op.WithContext("total_objects", len(objects))
-	op.WithContext("filtered_objects", len(filteredObjects))
-	op.WithContext("matched_count", matchedCount)
-	op.WithContext("excluded_count", excludedCount)
-	
-	if year != "" {
-		op.WithContext("year_filter", year)
-	}
-
-	if len(filteredObjects) > 0 {
-		err := a.processFilteredObjects(ctx, filteredObjects, year, templateConfig, metadata)
-		if err != nil {
-			op.Fail("Failed to process filtered objects", err)
-			return err
-		}
-		op.Complete(fmt.Sprintf("Successfully processed %d films", len(filteredObjects)))
-		return nil
-	}
-
-	op.Complete("Sheet processing completed - no films to process")
-	return nil
+	return objects
 }
 
-// processFilteredObjects processes the filtered film objects
-func (a *App) processFilteredObjects(ctx context.Context, filteredObjects []map[string]any, year string, templateConfig services.TemplateData, metadata *models.Metadata) error {
+// filterRows keeps rows for the edition year ("Excéntrico <year>") and, when
+// film is set, the row whose TÍTULO ORIGINAL equals it (case-insensitive).
+func filterRows(objects []map[string]any, year, film string) []map[string]any {
+	film = strings.TrimSpace(film)
+	var out []map[string]any
+	for _, obj := range objects {
+		if year != "" && !strings.EqualFold(strings.TrimSpace(utils.CellString(obj["EDICIÓN"])), "Excéntrico "+year) {
+			continue
+		}
+		if film != "" && !strings.EqualFold(strings.TrimSpace(filmTitle(obj)), film) {
+			continue
+		}
+		out = append(out, obj)
+	}
+	return out
+}
+
+// filmTitle returns the row's TÍTULO ORIGINAL (or Name), or "unnamed_film".
+func filmTitle(obj map[string]any) string {
+	if t := utils.CellString(obj["TÍTULO ORIGINAL"]); t != "" {
+		return t
+	}
+	if t := utils.CellString(obj["Name"]); t != "" {
+		return t
+	}
+	return "unnamed_film"
+}
+
+// processFilteredObjects processes the selected films in order. A failing
+// film is reported and skipped; an interrupt stops before the next film.
+func (a *App) processFilteredObjects(ctx context.Context, films []map[string]any, opts ProcessOptions) error {
 	l := logger.Get()
-	op := l.StartOperation("process_filtered_objects")
-	op.WithContext("total_films", len(filteredObjects))
-	op.WithContext("year", year)
+	op := l.StartOperation("process_films").Important()
+	op.WithContext("total_films", len(films))
+	op.WithContext("year", opts.Year)
+	op.WithContext("dry_run", opts.DryRun)
 
 	baseDir := "films"
-	if err := os.MkdirAll(baseDir, 0755); err != nil {
-		op.Fail("Failed to create films directory", err)
-		return err
-	}
-
-	var processedCount, successCount, errorCount int
-
-	for _, obj := range filteredObjects {
-		if err := ctx.Err(); err != nil {
-			op.Fail(fmt.Sprintf("Processing interrupted after %d of %d films", processedCount, len(filteredObjects)), err)
+	if !opts.DryRun {
+		if err := os.MkdirAll(baseDir, 0755); err != nil {
+			op.Fail("Failed to create films directory", err)
 			return err
 		}
-		processedCount++
+	}
 
-		filmName := "unnamed_film"
-		filmSeccion := "unnamed_section"
-		filmDirect := "unammed_directs"
-		if name, exists := obj["TÍTULO ORIGINAL"]; exists && name != nil {
-			filmName = utils.CellString(name)
-		} else if name, exists := obj["Name"]; exists && name != nil {
-			filmName = utils.CellString(name)
+	total := len(films)
+	var processed, succeeded, failed int
+	for i, obj := range films {
+		if err := ctx.Err(); err != nil {
+			op.Fail(fmt.Sprintf("Processing interrupted after %d of %d films", processed, total), err)
+			l.Progress("Interrupted after %d of %d films.", processed, total)
+			return err
 		}
-		if name, exists := obj["SECCIÓN"]; exists && name != nil {
-			filmSeccion = utils.CellString(name)
-		}
-		if name, exists := obj["DIRECCIÓN"]; exists && name != nil {
-			filmDirect = utils.CellString(name)
-		}
+		processed++
 
-		filmID := strings.ToLower(strings.ReplaceAll(filmName, " ", "_"))
+		title := filmTitle(obj)
+		section := utils.CellString(obj["SECCIÓN"])
+		directors := utils.CellString(obj["DIRECCIÓN"])
+		prefix := fmt.Sprintf("[%d/%d] %q", i+1, total, title)
 
-		filmOp := l.StartOperation("process_single_film")
-		filmOp.WithFilm(filmID, filmName, year, filmSeccion)
-		filmOp.WithContext("film_index", processedCount)
-		filmOp.WithContext("total_films", len(filteredObjects))
-
-		caption, err := CreateMetadata(filmName, filmSeccion, filmDirect, metadata, year)
+		caption, err := CreateMetadata(title, section, directors, opts.Metadata, opts.Year)
 		if err != nil {
-			filmOp.Fail(fmt.Sprintf("Failed to build caption for film '%s'", filmName), err)
-			errorCount++
+			l.StartOperation("build_caption").WithFilm(utils.SanitizeFilename(title), title, opts.Year, section).Fail("Failed to build caption", err)
+			l.Progress("%s → FAILED: %v", prefix, err)
+			failed++
 			continue
 		}
 
-		if err := a.filmProcessor.ProcessSingleFilm(ctx, obj, baseDir, year, filmName, caption, templateConfig); err != nil {
-			filmOp.Fail(fmt.Sprintf("Failed to process film '%s'", filmName), err)
-			errorCount++
-		} else {
-			filmOp.Complete(fmt.Sprintf("Successfully processed film '%s'", filmName))
-			successCount++
+		if opts.DryRun {
+			l.Progress("%s → would process (section %q, directors %q)", prefix, section, directors)
+			succeeded++
+			continue
 		}
+
+		res, err := a.filmProcessor.ProcessSingleFilm(ctx, obj, baseDir, opts.Year, title, caption, opts.Template)
+		if err != nil {
+			l.Progress("%s → FAILED: %v", prefix, err)
+			failed++
+			continue
+		}
+		l.Progress("%s → post #%d, %d images", prefix, res.PostID, res.Images)
+		succeeded++
 	}
 
-	op.WithCounts(processedCount, 0, 0, 0, 0, 0)
-	op.WithContext("success_count", successCount)
-	op.WithContext("error_count", errorCount)
-	op.Complete(fmt.Sprintf("Processing completed: %d total, %d successful, %d failed", processedCount, successCount, errorCount))
-
+	op.WithContext("success_count", succeeded)
+	op.WithContext("error_count", failed)
+	op.Complete(fmt.Sprintf("Processing completed: %d total, %d successful, %d failed", processed, succeeded, failed))
+	l.Progress("Done: %d films, %d succeeded, %d failed.", processed, succeeded, failed)
 	return nil
+}
+
+// CheckResult is one line of the -check report.
+type CheckResult struct {
+	Name   string
+	Detail string
+	Err    error
+}
+
+// Check verifies WordPress authentication, Turso connectivity and that the
+// sheet's header row can be read. It never writes anything.
+func (a *App) Check(ctx context.Context) []CheckResult {
+	var results []CheckResult
+
+	user, err := a.wordpressService.TestConnection(ctx)
+	results = append(results, CheckResult{Name: "WordPress", Detail: "authenticated as " + user, Err: err})
+
+	err = a.tursoService.Ping(ctx)
+	results = append(results, CheckResult{Name: "Turso", Detail: "connected", Err: err})
+
+	data, err := a.sheetsService.ReadRange(ctx, a.config.GoogleSheetID, "TODO!1:1")
+	detail := ""
+	if err == nil {
+		if len(data) == 0 {
+			err = errors.New("header row is empty")
+		} else {
+			detail = fmt.Sprintf("%d header columns", len(data[0]))
+		}
+	}
+	results = append(results, CheckResult{Name: "Google Sheet", Detail: detail, Err: err})
+
+	return results
 }
 
 // directorSplitRe splits a multi-director cell ("A, B y C", "A & B", "A + B").

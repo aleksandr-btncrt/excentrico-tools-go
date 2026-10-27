@@ -5,12 +5,13 @@ import (
 	"image"
 	"image/jpeg"
 	"image/png"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/disintegration/imaging"
+
+	"excentrico-tools-go/internal/debug"
 )
 
 type ImageService struct {
@@ -41,7 +42,7 @@ func (s *ImageService) ResizeImage(inputPath, outputPath string) error {
 		return fmt.Errorf("failed to save resized image: %v", err)
 	}
 
-	log.Printf("Resized image: %s -> %s", inputPath, outputPath)
+	debug.Printf("Resized image: %s -> %s", inputPath, outputPath)
 	return nil
 }
 
