@@ -1,6 +1,9 @@
-package services
+package sheet
 
-type FilmData struct {
+import "strings"
+
+// Film is one row of the films sheet (formerly services.FilmData).
+type Film struct {
 	TituloOriginal      string `json:"titulo_original"`
 	Direccion           string `json:"direccion"`
 	Pais                string `json:"pais"`
@@ -38,5 +41,33 @@ type FilmData struct {
 	Categoria           string `json:"categoria"`
 	MultiDir            string `json:"multi_dir"`
 
+	// AdditionalFields holds non-empty cells of columns that are not Film
+	// fields, keyed by header.
 	AdditionalFields map[string]string `json:"additional_fields,omitempty"`
+}
+
+// UnnamedFilm is the title used when a row has no title.
+const UnnamedFilm = "unnamed_film"
+
+// Title returns TÍTULO ORIGINAL, falling back to the "Name" column and then
+// to UnnamedFilm. It is the film's identity: the local directory and the
+// metadata key are derived from it.
+func (f *Film) Title() string {
+	if t := strings.TrimSpace(f.TituloOriginal); t != "" {
+		return f.TituloOriginal
+	}
+	if t := strings.TrimSpace(f.AdditionalFields[ColName]); t != "" {
+		return f.AdditionalFields[ColName]
+	}
+	return UnnamedFilm
+}
+
+// HasTitle reports whether TÍTULO ORIGINAL is set.
+func (f *Film) HasTitle() bool {
+	return strings.TrimSpace(f.TituloOriginal) != ""
+}
+
+// IsMultiDir reports whether the "Multi Dir" column is "SI" (any case).
+func (f *Film) IsMultiDir() bool {
+	return strings.EqualFold(strings.TrimSpace(f.MultiDir), "SI")
 }

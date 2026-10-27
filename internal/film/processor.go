@@ -11,33 +11,35 @@ import (
 	"excentrico-tools-go/internal/drive"
 	"excentrico-tools-go/internal/logger"
 	"excentrico-tools-go/internal/services"
+	"excentrico-tools-go/internal/sheet"
 	"excentrico-tools-go/internal/utils"
 	"excentrico-tools-go/internal/wordpress"
 )
 
-// Processor handles the processing of individual films
+// Processor runs the per-film pipeline: Drive download + resize, media
+// upload, WordPress post and Divi template.
 type Processor struct {
-	driveService        *services.GoogleDriveService
-	imageService        *services.ImageService
-	wordpressService    *services.WordPressService
-	diviTemplateService *services.DiviTemplateService
-	tursoService        *services.TursoService
+	drive     DriveClient
+	images    ImageResizer
+	wordpress WordPressClient
+	divi      *services.DiviTemplateService
+	store     MetadataStore
 }
 
-// NewProcessor creates a new film processor with the required services
+// NewProcessor creates a film processor over the given dependencies.
 func NewProcessor(
-	driveService *services.GoogleDriveService,
-	imageService *services.ImageService,
-	wordpressService *services.WordPressService,
-	diviTemplateService *services.DiviTemplateService,
-	tursoService *services.TursoService,
+	driveClient DriveClient,
+	images ImageResizer,
+	wp WordPressClient,
+	divi *services.DiviTemplateService,
+	store MetadataStore,
 ) *Processor {
 	return &Processor{
-		driveService:        driveService,
-		imageService:        imageService,
-		wordpressService:    wordpressService,
-		diviTemplateService: diviTemplateService,
-		tursoService:        tursoService,
+		drive:     driveClient,
+		images:    images,
+		wordpress: wp,
+		divi:      divi,
+		store:     store,
 	}
 }
 
@@ -51,12 +53,13 @@ type Result struct {
 // Drive download + resize, media upload, WordPress post and Divi template.
 // caption is written to <filmDir>/metadata.json as {"caption": ...}.
 // It emits exactly one "process_single_film" event (never sampled away).
-func (p *Processor) ProcessSingleFilm(ctx context.Context, obj map[string]any, baseDir string, year string, filmName string, caption string, templateConfig services.TemplateData) (Result, error) {
+func (p *Processor) ProcessSingleFilm(ctx context.Context, f *sheet.Film, baseDir string, year string, caption string, templateConfig services.TemplateData) (Result, error) {
+	filmName := f.Title()
 	l := logger.Get()
 	op := l.StartOperation("process_single_film").Important()
 
 	filmID := utils.SanitizeFilename(filmName)
-	filmSection := utils.CellString(obj["SECCIÓN"])
+	filmSection := f.Seccion
 	op.WithFilm(filmID, filmName, year, filmSection)
 
 	filmDir := filepath.Join(baseDir, filmID)
@@ -77,21 +80,21 @@ func (p *Processor) ProcessSingleFilm(ctx context.Context, obj map[string]any, b
 
 	// Download and resize Google Drive files when the sheet links a folder.
 	// drive.ProcessGoogleDriveFiles logs its own "process_drive_files" event.
-	if enlaces := utils.CellString(obj["ENLACES"]); enlaces != "" {
-		if err := drive.ProcessGoogleDriveFiles(ctx, filmDir, p.driveService, p.imageService, p.tursoService, filmName, enlaces); err != nil {
+	if strings.TrimSpace(f.Enlaces) != "" {
+		if err := drive.ProcessGoogleDriveFiles(ctx, filmDir, p.drive, p.images, p.store, f); err != nil {
 			return fail("Failed to process Google Drive files", err)
 		}
 	} else {
 		op.WithContext("drive_skipped", "no ENLACES URL")
 	}
 
-	imageIds, err := wordpress.UploadMediaToWordPress(ctx, p.wordpressService, p.tursoService, filmDir, filmName, obj)
+	imageIds, err := wordpress.UploadMediaToWordPress(ctx, p.wordpress, p.store, filmDir, f)
 	if err != nil {
 		return fail("Failed to upload media to WordPress", err)
 	}
 	op.WithContext("image_count", len(imageIds))
 
-	postID, err := wordpress.CreateOrUpdateWordPressProject(ctx, p.wordpressService, p.diviTemplateService, p.tursoService, filmDir, obj, year, imageIds, templateConfig)
+	postID, err := wordpress.CreateOrUpdateWordPressProject(ctx, p.wordpress, p.divi, p.store, filmDir, f, year, imageIds, templateConfig)
 	if err != nil {
 		return fail("Failed to create/update WordPress project", err)
 	}

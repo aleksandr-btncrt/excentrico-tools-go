@@ -120,28 +120,53 @@ func (s *TursoService) Close() error {
 	return nil
 }
 
-func (s *TursoService) SaveWordPressMetadata(filmID string, metadata interface{}) error {
-	return s.SaveMetadata(filmID, "wordpress", metadata)
+// MetadataStore persists JSON metadata per film and type. TursoService is
+// the production implementation; tests use an in-memory fake. GetMetadata
+// must return an error wrapping ErrMetadataNotFound when nothing is stored.
+type MetadataStore interface {
+	SaveMetadata(filmID, metadataType string, data any) error
+	GetMetadata(filmID, metadataType string, dest any) error
 }
 
-func (s *TursoService) GetWordPressMetadata(filmID string, dest interface{}) error {
-	return s.GetMetadata(filmID, "wordpress", dest)
+var _ MetadataStore = (*TursoService)(nil)
+
+// Metadata types stored per film.
+const (
+	MetadataWordPress      = "wordpress"
+	MetadataDriveFiles     = "drive_files"
+	MetadataWPImages       = "wp_images"
+	MetadataWordPressMedia = "wordpress_media"
+	MetadataDirectorMedia  = "director_media"
+)
+
+// SaveWordPressMetadata stores the film's post metadata.
+func SaveWordPressMetadata(store MetadataStore, filmID string, metadata any) error {
+	return store.SaveMetadata(filmID, MetadataWordPress, metadata)
 }
 
-func (s *TursoService) SaveDriveFilesMetadata(filmID string, files interface{}) error {
-	return s.SaveMetadata(filmID, "drive_files", files)
+// GetWordPressMetadata loads the film's post metadata.
+func GetWordPressMetadata(store MetadataStore, filmID string, dest any) error {
+	return store.GetMetadata(filmID, MetadataWordPress, dest)
 }
 
-func (s *TursoService) GetDriveFilesMetadata(filmID string, dest interface{}) error {
-	return s.GetMetadata(filmID, "drive_files", dest)
+// SaveDriveFilesMetadata stores the film's Drive file list.
+func SaveDriveFilesMetadata(store MetadataStore, filmID string, files any) error {
+	return store.SaveMetadata(filmID, MetadataDriveFiles, files)
 }
 
-func (s *TursoService) SaveWPImagesMetadata(filmID string, images interface{}) error {
-	return s.SaveMetadata(filmID, "wp_images", images)
+// GetDriveFilesMetadata loads the film's Drive file list.
+func GetDriveFilesMetadata(store MetadataStore, filmID string, dest any) error {
+	return store.GetMetadata(filmID, MetadataDriveFiles, dest)
 }
 
-func (s *TursoService) GetWPImagesMetadata(filmID string, dest interface{}) error {
-	return s.GetMetadata(filmID, "wp_images", dest)
+// SaveWPImagesMetadata stores the film's file name -> media ID map.
+func SaveWPImagesMetadata(store MetadataStore, filmID string, images any) error {
+	return store.SaveMetadata(filmID, MetadataWPImages, images)
+}
+
+// GetWPImagesMetadata loads the film's file name -> media ID map.
+func GetWPImagesMetadata(store MetadataStore, filmID string, dest any) error {
+	return store.GetMetadata(filmID, MetadataWPImages, dest)
 }
 
 // DirectorMediaCacheKey is the global film_id used to store director image cache (shared across all films).
@@ -153,10 +178,12 @@ type DirectorMediaCacheEntry struct {
 	SourceURL string `json:"source_url"`
 }
 
-func (s *TursoService) GetDirectorMediaCache(dest interface{}) error {
-	return s.GetMetadata(DirectorMediaCacheKey, "director_media", dest)
+// GetDirectorMediaCache loads the director name -> media cache shared by all films.
+func GetDirectorMediaCache(store MetadataStore, dest any) error {
+	return store.GetMetadata(DirectorMediaCacheKey, MetadataDirectorMedia, dest)
 }
 
-func (s *TursoService) SaveDirectorMediaCache(data interface{}) error {
-	return s.SaveMetadata(DirectorMediaCacheKey, "director_media", data)
+// SaveDirectorMediaCache stores the director name -> media cache shared by all films.
+func SaveDirectorMediaCache(store MetadataStore, data any) error {
+	return store.SaveMetadata(DirectorMediaCacheKey, MetadataDirectorMedia, data)
 }
