@@ -310,8 +310,10 @@ docs/plan/, plans/         refactor plan
 - **`template file not found` / `invalid template JSON: unknown field`:**
   add or convert `templates/<year>.json` (see section 6).
 - **`google_sheet_id is not configured`:** set it in `configuration.json`.
-- **Sheet `403`/access denied:** share the sheet (and the Drive folders)
-  with the service account e-mail from `credentials.json`.
+- **Sheet `403`/access denied:** check that `google_sheet_id` points to a
+  sheet that still exists (Google also answers `403` for a deleted sheet),
+  and share it (and the Drive folders) with the service account e-mail from
+  `credentials.json`. `-check` reports this without processing anything.
 - **WordPress `401`:** check `username` and `application_password`, and
   `base_url` (no trailing `/wp-json`).
 - **No films matched:** compare `EDICIÓN` in the sheet with
